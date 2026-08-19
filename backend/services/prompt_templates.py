@@ -50,23 +50,35 @@ LANGUAGE_GUIDES = {
     "Malay": "Write ALL dialogue in natural, conversational Malay (Bahasa Melayu), like a real creator talking casually.",
 }
 
-# Duration -> recommended scene structure (approximate; adaptable to style).
+# Duration -> recommended scene structure (strictly enforced).
 DURATION_STRUCTURE = {
     "10 seconds": (
-        "Total ~10 seconds. Use approximately 3 scenes: "
+        "Total ~10 seconds. Use EXACTLY 3 scenes: "
         "SCENE 1 HOOK (0-3s), SCENE 2 PRODUCT/BENEFIT (3-7s), SCENE 3 CTA (7-10s). "
-        "The scene timings MUST add up to ~10 seconds."
+        "The scene timings MUST add up to 10 seconds."
     ),
     "20 seconds": (
-        "Total ~20 seconds. Use approximately 4 scenes: "
+        "Total ~20 seconds. Use EXACTLY 4 scenes: "
         "SCENE 1 HOOK (0-4s), SCENE 2 PROBLEM/CONTEXT (4-9s), SCENE 3 PRODUCT/SOLUTION (9-15s), "
-        "SCENE 4 CTA (15-20s). The scene timings MUST add up to ~20 seconds."
+        "SCENE 4 CTA (15-20s). The scene timings MUST add up to 20 seconds."
     ),
     "30 seconds": (
-        "Total ~30 seconds. Use approximately 5 scenes: "
-        "SCENE 1 HOOK (0-4s), SCENE 2 PROBLEM/STORY (4-10s), SCENE 3 PRODUCT INTRODUCTION (10-16s), "
-        "SCENE 4 DEMONSTRATION/BENEFIT (16-24s), SCENE 5 CTA (24-30s). "
-        "The scene timings MUST add up to ~30 seconds."
+        "Total ~30 seconds. Use EXACTLY 5 to 6 scenes: "
+        "SCENE 1 HOOK / PAIN POINT (0-4s), SCENE 2 PERSONAL STORY / CONTEXT (4-10s), "
+        "SCENE 3 PRODUCT INTRODUCTION & KEY FEATURES (10-16s), "
+        "SCENE 4 REAL-LIFE DEMONSTRATION & BENEFITS (16-22s), "
+        "SCENE 5 SATISFACTION / SOCIAL PROOF (22-26s), "
+        "SCENE 6 CALL TO ACTION (26-30s). "
+        "The scene timings MUST add up to 30 seconds."
+    ),
+    "60 seconds": (
+        "Total ~60 seconds. Use EXACTLY 6 to 8 scenes: "
+        "SCENE 1 HOOK (0-5s), SCENE 2 PROBLEM & FRUSTRATION (5-15s), "
+        "SCENE 3 DISCOVERY / PRODUCT INTRO (15-25s), "
+        "SCENE 4 IN-DEPTH DEMONSTRATION & FEATURES (25-40s), "
+        "SCENE 5 BEFORE/AFTER OR PROOF OF VALUE (40-50s), "
+        "SCENE 6 CLOSING SUMMARY & CTA (50-60s). "
+        "The scene timings MUST add up to 60 seconds."
     ),
 }
 

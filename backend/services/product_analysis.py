@@ -46,20 +46,22 @@ async def analyze(session_id: str, image_bytes: bytes) -> dict:
         data = await ai_service.analyze_image_json(session_id, SYSTEM, PROMPT, image_bytes)
     except Exception as e:
         logger.warning(f"Error pada pemanggilan analyze_image_json: {e}. Mengaktifkan mock fallback.")
-        data = ai_service.get_mock_product_analysis()
+        data = ai_service.get_mock_product_analysis("Produk Pilihan")
 
     if not isinstance(data, dict):
-        data = ai_service.get_mock_product_analysis()
+        data = ai_service.get_mock_product_analysis("Produk Pilihan")
 
-    # Normalisasi: pastikan setiap key skema tersedia dan valid
+    # Normalisasi: pastikan setiap key skema tersedia dan valid tanpa menimpa data nyata
     result = {}
-    mock_defaults = ai_service.get_mock_product_analysis()
     for k in _SCHEMA_KEYS:
         v = data.get(k)
-        if v is None or v == "":
-            v = mock_defaults.get(k, [] if k in ("dominant_colors", "materials", "visual_features") else "")
+        if v is None:
+            v = [] if k in ("dominant_colors", "materials", "visual_features") else ""
         elif k in ("dominant_colors", "materials", "visual_features") and not isinstance(v, list):
             v = [str(v)]
         result[k] = v
+
+    if not result.get("product_name"):
+        result["product_name"] = "Produk Pilihan"
 
     return result

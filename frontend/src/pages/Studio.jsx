@@ -234,43 +234,242 @@ export default function Studio() {
         // Langsung tampilkan hasil prompt fallback dan paksa ke Result Page (Step 4)
         console.warn("Generate prompt API fallback activated:", e);
 
-        const fallbackPromptData = {
-          master_prompt: `[MASTER UGC PROMPT - ${video?.ugc_style?.toUpperCase() || "PROBLEM -> SOLUTION"}]\nA high-converting, authentic UGC video for ${effectiveAnalysis?.product_name || "Produk Unggulan"}.\nFormat: Vertical ${video?.aspect_ratio || "9:16"}, cinematic mobile sensor aesthetic, natural daylight setting.\nCreator Persona: Friendly, relatable ${creator?.gender?.toLowerCase() || "female"} Indonesian creator speaking in ${creator?.speaking_style?.toLowerCase() || "natural"} tone directly to the camera.\nVisual Continuity: Strict character and product locking across all scenes with identical packaging details.`,
-          scenes: [
+        const is30s = (video?.duration || "").includes("30");
+        const is20s = (video?.duration || "").includes("20");
+        const prodName = effectiveAnalysis?.product_name || "Produk Pilihan";
+        const prodCase = effectiveAnalysis?.likely_use_case || "aktivitas harian";
+        const prodFeat = Array.isArray(effectiveAnalysis?.visual_features) && effectiveAnalysis?.visual_features?.length
+          ? effectiveAnalysis.visual_features.slice(0, 2).join(", ")
+          : "desain modern dan fungsional";
+        const dur = video?.duration || "30 seconds";
+        const style = video?.ugc_style || "Problem -> Solution";
+        const ratio = video?.aspect_ratio || "9:16";
+        const cGender = creator?.gender || "Female";
+        const cLoc = creator?.location || "Living Room";
+
+        let dynamicScenes = [];
+        if (is30s) {
+          dynamicScenes = [
+            {
+              number: 1,
+              name: "Adegan 1: Hook Penasaran & Masalah",
+              time: "0-4 detik",
+              dialogue: `Kalian sering ngerasa ribet gak sih pas butuh ${prodCase} pas lagi di luar rumah?`,
+              visual: `Close-up shot kreator di ${cLoc.toLowerCase()} memegang ${prodName} dengan ekspresi relatable dan penasaran langsung ke kamera smartphone.`,
+              camera: "Eye-level handheld selfie angle, natural motion, crisp 4K mobile aesthetic",
+              lighting: "Soft natural window daylight with warm rim light",
+              action: `Kreator berbicara ekspresif sambil memegang ${prodName}`,
+              facial_expression: "Relatable curiosity and friendly smile",
+              gesture: "One-hand gesture pointing slightly to product",
+              audio: "Clear natural vocal, upbeat lo-fi background music",
+              transition: "Fast whip pan to context",
+              character_continuity: `Identical ${cGender.toLowerCase()} creator in early 20s, casual daily outfit`,
+              product_continuity: `Identical ${prodName} with exact shape, color, and finish`,
+              location_continuity: `Consistent modern ${cLoc.toLowerCase()} interior`,
+              negative_constraints: "No CGI look, no morphing"
+            },
+            {
+              number: 2,
+              name: "Adegan 2: Cerita Pengalaman",
+              time: "4-10 detik",
+              dialogue: "Jujur aku dulu sering banget gonta-ganti karena gak ada yang bener-bener awet dan fungsional.",
+              visual: `Medium shot kreator menceritakan pengalamannya dengan gestur santai, ${prodName} diletakkan rapi di atas meja.`,
+              camera: "Medium handheld shot with subtle natural breathing motion",
+              lighting: "Balanced warm room lighting",
+              action: "Kreator tersenyum mengingat pengalaman sebelumnya",
+              facial_expression: "Honest, authentic, friendly smile",
+              gesture: "Casual conversational hand gestures",
+              audio: "Warm storytelling tone",
+              transition: "Match cut to product reveal",
+              character_continuity: "Identical creator face, hairstyle, and wardrobe",
+              product_continuity: `Same ${prodName} visible on desk`,
+              location_continuity: `Same ${cLoc.toLowerCase()} room`,
+              negative_constraints: "No jump cuts in appearance"
+            },
+            {
+              number: 3,
+              name: "Adegan 3: Solusi Produk",
+              time: "10-16 detik",
+              dialogue: `Sampai akhirnya aku nemu ${prodName} ini. Pas pertama kali pegang, langsung berasa beda banget build quality-nya!`,
+              visual: `Close-up shot kreator mengangkat ${prodName} dan menunjukkannya detail ke kamera, memperlihatkan ${prodFeat}.`,
+              camera: "Close-up focus racking onto product texture and details",
+              lighting: "Clean studio light highlighting product finish and material",
+              action: `Memperlihatkan bodi dan fitur ${prodName} ke arah lensa`,
+              facial_expression: "Excited, genuine discovery expression",
+              gesture: "Turning the product slowly to show design",
+              audio: "Enthusiastic tone, crisp vocal audio",
+              transition: "Smooth cut to demonstration",
+              character_continuity: "Consistent creator identity and styling",
+              product_continuity: `Exact match ${prodName} design and details`,
+              location_continuity: "Same lifestyle interior",
+              negative_constraints: "No inconsistent colors or labels"
+            },
+            {
+              number: 4,
+              name: "Adegan 4: Demonstrasi Nyata",
+              time: "16-22 detik",
+              dialogue: `Fiturnya beneran ngebantu banget buat ${prodCase}, bahannya solid dan super praktis dipakai seharian.`,
+              visual: `Demonstrasi langsung pemakaian ${prodName}. Memperlihatkan kepraktisan dan fungsionalitas produk secara nyata.`,
+              camera: "Dynamic angle showing practical handling",
+              lighting: "Bright natural lighting",
+              action: `Mendemonstrasikan fungsionalitas ${prodName} dengan percaya diri`,
+              facial_expression: "Confident, thoroughly satisfied",
+              gesture: "Smooth ergonomic product handling",
+              audio: "Authentic product interaction sound effect, convincing voiceover",
+              transition: "Cut back to creator selfie shot",
+              character_continuity: "Identical creator hands and clothing",
+              product_continuity: `Consistent ${prodName} throughout action`,
+              location_continuity: "Same setting",
+              negative_constraints: "No robotic movements, no unnatural physics"
+            },
+            {
+              number: 5,
+              name: "Adegan 5: Bukti Kepuasan",
+              time: "22-26 detik",
+              dialogue: "Sekarang udah jadi andalan wajib aku ke mana-mana, beneran worth it banget!",
+              visual: `Kreator tersenyum puas memegang ${prodName} di dekat wajah, menunjukkan kepuasan tulus.`,
+              camera: "Medium close-up selfie angle, warm depth of field",
+              lighting: "Flattering soft beauty light",
+              action: "Mengangguk puas memberikan rekomendasi tulus",
+              facial_expression: "High-trust, sincere, happy smile",
+              gesture: "Holding product proudly",
+              audio: "Warm friendly vocal resonance",
+              transition: "Hold into closing call to action",
+              character_continuity: "Consistent styling and hair",
+              product_continuity: `Identical ${prodName}`,
+              location_continuity: "Same aesthetic room",
+              negative_constraints: "No artificial posing"
+            },
+            {
+              number: 6,
+              name: "Adegan 6: Call to Action (Ajakan Beli)",
+              time: "26-30 detik",
+              dialogue: `Buat kalian yang mau punya ${prodName} ini juga, langsung klik link di bawah mumpung lagi ada promo ya!`,
+              visual: `Kreator tersenyum antusias memegang ${prodName} sambil menunjuk ke arah tombol aksi di bawah.`,
+              camera: "Direct engaging selfie angle",
+              lighting: "Radiant bright warm light",
+              action: "Menunjuk ke arah bawah layar mengajak penonton checkout",
+              facial_expression: "Warm engaging closing smile",
+              gesture: "Pointing towards bottom CTA link",
+              audio: "Clear closing CTA voiceover with music outro",
+              transition: "Final hold on product lock frame",
+              character_continuity: "Identical creator styling",
+              product_continuity: `Crisp prominent ${prodName} package shot`,
+              location_continuity: "Same lifestyle room",
+              negative_constraints: "No CGI look, purely organic UGC creator style"
+            }
+          ];
+        } else if (is20s) {
+          dynamicScenes = [
+            {
+              number: 1,
+              name: "Adegan 1: Hook Penasaran",
+              time: "0-4 detik",
+              dialogue: `Jujur, tadinya aku penasaran banget apa bener ${prodName} ini sebagus itu...`,
+              visual: `Close-up shot kreator memegang ${prodName} dengan ekspresi penasaran menghadap kamera.`,
+              camera: "Handheld selfie camera, eye level",
+              lighting: "Soft natural morning light",
+              action: `Menunjukkan ${prodName} sekilas ke arah kamera`,
+              facial_expression: "Curious and relatable",
+              gesture: "Holding product close to chest",
+              audio: "Crisp clear voiceover, upbeat music",
+              transition: "Quick cut to context",
+              character_continuity: `Identical ${cGender.toLowerCase()} creator`,
+              product_continuity: `Identical ${prodName}`,
+              location_continuity: `Modern ${cLoc.toLowerCase()}`,
+              negative_constraints: "No blur, no morphing"
+            },
+            {
+              number: 2,
+              name: "Adegan 2: Masalah & Kebutuhan",
+              time: "4-9 detik",
+              dialogue: `Soalnya susah banget cari yang beneran praktis dan awet buat ${prodCase}.`,
+              visual: "Medium shot kreator menceritakan masalah yang sering dialami.",
+              camera: "Medium handheld shot",
+              lighting: "Balanced warm room lighting",
+              action: "Berbicara santai dengan gestur tangan alami",
+              facial_expression: "Relatable and honest",
+              gesture: "Natural conversational hands",
+              audio: "Storytelling tone",
+              transition: "Cut to product reveal",
+              character_continuity: "Consistent styling and wardrobe",
+              product_continuity: `Same ${prodName} on table`,
+              location_continuity: `Same ${cLoc.toLowerCase()}`,
+              negative_constraints: "No inconsistencies"
+            },
+            {
+              number: 3,
+              name: "Adegan 3: Solusi Nyata",
+              time: "9-15 detik",
+              dialogue: `Tapi pas dicobain, ${prodFeat} beneran bikin aktivitas jauh lebih gampang!`,
+              visual: `Close-up demonstrasi pemakaian ${prodName}. Memperlihatkan detail bodi dan fungsi utama.`,
+              camera: "Smooth zoom in on product handling",
+              lighting: "Clean studio light",
+              action: `Mendemonstrasikan cara pemakaian ${prodName}`,
+              facial_expression: "Impressed and satisfied",
+              gesture: "Ergonomic handling",
+              audio: "Satisfying natural product sound effect",
+              transition: "Zoom out to CTA",
+              character_continuity: "Identical creator hands and face",
+              product_continuity: `Exact match ${prodName}`,
+              location_continuity: "Same room",
+              negative_constraints: "No CGI look"
+            },
+            {
+              number: 4,
+              name: "Adegan 4: Call to Action",
+              time: "15-20 detik",
+              dialogue: "Wajib punya minimal satu! Klik link di bawah sekarang mumpung lagi ada promo ya!",
+              visual: `Kreator tersenyum ramah memegang ${prodName} sambil menunjuk ke tombol beli.`,
+              camera: "Direct front selfie angle",
+              lighting: "Bright radiant light",
+              action: "Menunjuk ke tombol keranjang di bawah",
+              facial_expression: "Warm engaging smile",
+              gesture: "Pointing to CTA",
+              audio: "Clear closing speech with music fade out",
+              transition: "Hold on product frame",
+              character_continuity: "Consistent styling",
+              product_continuity: `Clear ${prodName} shot`,
+              location_continuity: "Same setting",
+              negative_constraints: "No artificial look"
+            }
+          ];
+        } else {
+          dynamicScenes = [
             {
               number: 1,
               name: "Adegan 1: Hook Menarik Perhatian",
               time: "0-3 detik",
-              dialogue: "Jujur, awalnya aku nggak terlalu percaya sama produk ini...",
-              visual: `Close-up shot kreator menghadap kamera smartphone di ruangan terang, memegang kemasan ${effectiveAnalysis?.product_name || "produk"} dengan ekspresi penasaran dan antusias.`,
-              camera: "Eye-level handheld selfie angle, subtle motion blur, crisp 4K mobile sensor aesthetic",
+              dialogue: `Jujur, tadinya aku ragu banget mau nyobain ${prodName} ini...`,
+              visual: `Close-up shot kreator memegang ${prodName} dengan ekspresi penasaran dan antusias.`,
+              camera: "Eye-level handheld selfie angle, crisp 4K mobile sensor aesthetic",
               lighting: "Soft morning window light with warm subtle rim light",
-              action: "Kreator tersenyum santai sambil menunjukkan produk ke arah kamera",
+              action: `Kreator tersenyum santai sambil menunjukkan ${prodName} ke arah kamera`,
               facial_expression: "Relatable curiosity and friendly smile",
               gesture: "Holding the product close to chest, gentle hand movement",
               audio: "Upbeat subtle background lo-fi music, clear crisp voiceover",
               transition: "Quick dynamic match cut to product demo",
-              character_continuity: "Identical creator appearance and outfit",
-              product_continuity: `Identical ${effectiveAnalysis?.product_name || "produk"} packaging and label`,
-              location_continuity: "Clean modern aesthetic room interior",
+              character_continuity: `Identical ${cGender.toLowerCase()} creator appearance and outfit`,
+              product_continuity: `Identical ${prodName} packaging and label`,
+              location_continuity: `Clean modern aesthetic ${cLoc.toLowerCase()} interior`,
               negative_constraints: "No blurry artifacts, no deformed hands, no floating objects"
             },
             {
               number: 2,
               name: "Adegan 2: Demonstrasi & Manfaat Utama",
               time: "3-7 detik",
-              dialogue: "Tapi pas dicobain rutin, teksturnya ringan banget dan hasilnya langsung kelihatan glowing!",
-              visual: `Medium close-up shot memperlihatkan aplikasi praktis ${effectiveAnalysis?.product_name || "produk"}. Tekstur produk terlihat jelas dengan kilau alami.`,
-              camera: "Slight pan and zoom into product texture and creator glowing skin",
+              dialogue: `Tapi setelah dipakai buat ${prodCase}, hasilnya beneran terbukti dan ${prodFeat}!`,
+              visual: `Medium close-up shot memperlihatkan aplikasi nyata ${prodName}. Tekstur dan bodi produk terlihat jelas.`,
+              camera: "Slight pan and zoom into product texture and finish",
               lighting: "Clean balanced studio light emphasizing product clarity",
-              action: "Mendemonstrasikan pemakaian produk dengan santai dan natural",
+              action: `Mendemonstrasikan pemakaian ${prodName} dengan santai dan natural`,
               facial_expression: "Satisfied, impressed, and confident expression",
-              gesture: "Gentle application and showing glowing finish",
+              gesture: "Gentle application showing practical benefit",
               audio: "Satisfying natural sound effect, warm energetic voice tone",
               transition: "Smooth zoom out to call to action",
               character_continuity: "Consistent facial features and clothing",
-              product_continuity: `Exact match ${effectiveAnalysis?.product_name || "produk"} bottle and brand logo`,
-              location_continuity: "Same well-lit aesthetic interior",
+              product_continuity: `Exact match ${prodName} design and finish`,
+              location_continuity: `Same well-lit ${cLoc.toLowerCase()} interior`,
               negative_constraints: "No inconsistent colors, no distorted labels"
             },
             {
@@ -278,7 +477,7 @@ export default function Studio() {
               name: "Adegan 3: Call to Action (Ajakan Beli)",
               time: "7-10 detik",
               dialogue: "Buat kamu yang mau buktiin sendiri, klik link di bawah sekarang mumpung lagi diskon ya!",
-              visual: `Kreator tersenyum ramah memegang ${effectiveAnalysis?.product_name || "produk"} di samping wajahnya sambil menunjuk ke arah tombol keranjang / link pembelian.`,
+              visual: `Kreator tersenyum ramah memegang ${prodName} di samping wajahnya sambil menunjuk ke arah tombol pembelian.`,
               camera: "Direct front-facing selfie shot with pleasant depth of field",
               lighting: "Bright radiant warm light",
               action: "Menunjuk ke arah bawah layar dengan gesture ramah mengajak penonton",
@@ -287,26 +486,31 @@ export default function Studio() {
               audio: "Clear closing call-to-action speech, upbeat music fade out",
               transition: "Hold on product lock frame",
               character_continuity: "Consistent creator face and styling",
-              product_continuity: `Clear prominent ${effectiveAnalysis?.product_name || "produk"} package shot`,
-              location_continuity: "Consistent modern lifestyle setting",
+              product_continuity: `Clear prominent ${prodName} shot`,
+              location_continuity: `Consistent modern ${cLoc.toLowerCase()} lifestyle setting`,
               negative_constraints: "No artificial CGI look, purely organic UGC creator style"
             }
-          ],
+          ];
+        }
+
+        const fallbackPromptData = {
+          master_prompt: `[MASTER UGC PROMPT - ${style.toUpperCase()} - ${dur}]\nA high-converting, authentic UGC video for ${prodName}.\nFormat: Vertical ${ratio}, ${dur}, cinematic mobile sensor aesthetic, natural daylight setting.\nCreator Persona: Friendly, relatable ${cGender.toLowerCase()} Indonesian creator speaking in natural tone directly to the camera.\nVisual Continuity: Strict character and product locking across all scenes with identical packaging details.`,
+          scenes: dynamicScenes,
           summary: {
-            product: effectiveAnalysis?.product_name || "Produk Unggulan",
-            duration: video?.duration || "10 seconds",
-            aspect_ratio: video?.aspect_ratio || "9:16",
-            ugc_style: video?.ugc_style || "Problem -> Solution",
-            creator: `${creator?.gender || "Female"}, Relatable Creator`,
+            product: prodName,
+            duration: dur,
+            aspect_ratio: ratio,
+            ugc_style: style,
+            creator: `${cGender}, Relatable Creator`,
             language: language || "Bahasa Indonesia"
           },
           character_bible: {
-            creator_type: `Modern ${creator?.gender?.toLowerCase() || "female"} UGC creator`,
+            creator_type: `Modern ${cGender.toLowerCase()} UGC creator`,
             aesthetic: "Authentic, relatable, glowing natural appearance",
             wardrobe: "Casual aesthetic daily outfit with neutral warm tones"
           },
-          character_anchor: `Indonesian ${creator?.gender?.toLowerCase() || "female"} creator in early 20s, friendly smile, clean minimalist styling, soft natural daylight.`,
-          product_lock: `${effectiveAnalysis?.product_name || "Produk"} with identical clean packaging, correct brand details, and authentic product proportions.`,
+          character_anchor: `Indonesian ${cGender.toLowerCase()} creator in early 20s, friendly smile, clean minimalist styling, soft natural daylight in ${cLoc.toLowerCase()}.`,
+          product_lock: `${prodName} with identical clean packaging, correct brand details, and authentic product proportions.`,
           character_locked: true,
           product_locked: true
         };
