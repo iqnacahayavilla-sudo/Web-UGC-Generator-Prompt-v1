@@ -18,3 +18,24 @@ export async function generatePrompt(projectId, payload) {
   const { data } = await axios.post(`${API}/projects/${projectId}/generate`, payload);
   return data;
 }
+
+export async function adminCreateUser(payload) {
+  const { data } = await axios.post(`${API}/admin/users/create`, payload, {
+    headers: { "Content-Type": "application/json" }
+  });
+  return data;
+}
+
+export async function adminGetUsers(adminEmail) {
+  const { data } = await axios.get(`${API}/admin/users`, {
+    params: { admin_email: adminEmail }
+  });
+  return data;
+}
+
+export async function adminAdjustCredits(payload) {
+  const { data } = await axios.post(`${API}/admin/users/adjust-credits`, payload, {
+    headers: { "Content-Type": "application/json" }
+  });
+  return data;
+}

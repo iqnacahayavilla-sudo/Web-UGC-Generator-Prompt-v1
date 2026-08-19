@@ -492,7 +492,10 @@ class AdminAdjustCreditsRequest(BaseModel):
     mode: str = "add"  # 'add' | 'set'
     admin_email: Optional[str] = None
 
+@app.post("/api/admin/users/create")
+@app.post("/api/admin/users/create/")
 @api_router.post("/admin/users/create")
+@api_router.post("/admin/users/create/")
 async def admin_create_user(req: AdminCreateUserRequest):
     """Membuat akun member baru oleh Admin (Invite-Only)."""
     if req.admin_email and req.admin_email.lower() not in ADMIN_EMAILS:
@@ -511,7 +514,10 @@ async def admin_create_user(req: AdminCreateUserRequest):
         logger.error(f"Admin create user failed: {e}")
         raise HTTPException(status_code=500, detail=f"Gagal membuat akun member: {str(e)}")
 
+@app.get("/api/admin/users")
+@app.get("/api/admin/users/")
 @api_router.get("/admin/users")
+@api_router.get("/admin/users/")
 async def admin_list_users(admin_email: Optional[str] = Query(None), limit: int = Query(100)):
     """Mengambil daftar seluruh member terdaftar untuk Admin Panel."""
     if admin_email and admin_email.lower() not in ADMIN_EMAILS:
@@ -524,7 +530,10 @@ async def admin_list_users(admin_email: Optional[str] = Query(None), limit: int 
         logger.error(f"Admin list users failed: {e}")
         return {"success": False, "count": 0, "users": [], "error": str(e)}
 
+@app.post("/api/admin/users/adjust-credits")
+@app.post("/api/admin/users/adjust-credits/")
 @api_router.post("/admin/users/adjust-credits")
+@api_router.post("/admin/users/adjust-credits/")
 async def admin_adjust_credits(req: AdminAdjustCreditsRequest):
     """Menambah atau mengatur saldo kredit member oleh Admin."""
     if req.admin_email and req.admin_email.lower() not in ADMIN_EMAILS:
@@ -544,11 +553,12 @@ async def admin_adjust_credits(req: AdminAdjustCreditsRequest):
 
 app.include_router(api_router)
 
+# Explicit CORS Middleware configuration allowing POST and OPTIONS
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["*"],
 )
 

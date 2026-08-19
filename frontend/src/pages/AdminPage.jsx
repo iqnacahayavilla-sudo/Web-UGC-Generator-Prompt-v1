@@ -25,7 +25,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
-import axios from "axios";
+import { adminCreateUser, adminGetUsers, adminAdjustCredits } from "@/lib/api";
 
 export default function AdminPage() {
   const { user } = useAuth();
@@ -66,9 +66,9 @@ export default function AdminPage() {
   const fetchMembers = React.useCallback(async () => {
     setLoadingMembers(true);
     try {
-      const res = await axios.get(`/api/admin/users?admin_email=${encodeURIComponent(user?.email || "iqna.cahayavilla@gmail.com")}`);
-      if (res.data?.success) {
-        setMembers(res.data.users || []);
+      const data = await adminGetUsers(user?.email || "iqna.cahayavilla@gmail.com");
+      if (data?.success) {
+        setMembers(data.users || []);
       }
     } catch (e) {
       console.warn("Gagal memuat daftar member:", e);
@@ -81,7 +81,7 @@ export default function AdminPage() {
     fetchMembers();
   }, [fetchMembers]);
 
-  // Handle Create Member
+  // Handle Create Member via explicit POST
   const handleCreateMember = async (e) => {
     e.preventDefault();
     if (!formData.email || !formData.password || !formData.fullName) {
@@ -91,7 +91,7 @@ export default function AdminPage() {
 
     setIsSubmitting(true);
     try {
-      const res = await axios.post("/api/admin/users/create", {
+      const data = await adminCreateUser({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
         full_name: formData.fullName.trim(),
@@ -100,7 +100,7 @@ export default function AdminPage() {
         admin_email: user?.email || "iqna.cahayavilla@gmail.com",
       });
 
-      if (res.data?.success) {
+      if (data?.success) {
         toast.success(`Akun member ${formData.email} berhasil dibuat!`);
         setCreatedResult({
           email: formData.email.trim().toLowerCase(),
@@ -139,17 +139,17 @@ export default function AdminPage() {
     setTimeout(() => setCopied(false), 2500);
   };
 
-  // Add / Adjust credits
+  // Add / Adjust credits via explicit POST
   const handleAddCredits = async (memberId) => {
     setIsUpdatingCredit(true);
     try {
-      const res = await axios.post("/api/admin/users/adjust-credits", {
+      const data = await adminAdjustCredits({
         user_id: memberId,
         amount: Number(creditAmount) || 50,
         mode: "add",
         admin_email: user?.email || "iqna.cahayavilla@gmail.com",
       });
-      if (res.data?.success) {
+      if (data?.success) {
         toast.success(`Berhasil menambahkan ${creditAmount} kredit!`);
         setSelectedMember(null);
         fetchMembers();

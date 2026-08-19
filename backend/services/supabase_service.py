@@ -360,7 +360,8 @@ class SupabaseService:
     ) -> Dict[str, Any]:
         """
         Membuat akun member baru (Invite-Only) oleh Admin.
-        Mendaftarkan ke Supabase Auth, Profiles, dan MongoDB.
+        Membaca SUPABASE_SERVICE_ROLE_KEY untuk menginisialisasi Supabase Admin Client.
+        Mendaftarkan ke Supabase Auth Admin, Profiles, dan MongoDB.
         """
         import uuid
         now_str = datetime.now(timezone.utc).isoformat()
@@ -368,37 +369,70 @@ class SupabaseService:
         created_user = None
 
         url, key = _get_supabase_config()
+        # Baca SUPABASE_SERVICE_ROLE_KEY khusus untuk Auth Admin
+        service_role_key = (
+            os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+            or os.environ.get("SUPABASE_SERVICE_KEY")
+            or key
+        ).strip()
 
-        # 1. Coba daftarkan via Supabase Auth REST
-        if is_supabase_configured():
+        # 1. Coba daftarkan via Supabase Admin REST (auth/v1/admin/users)
+        if is_supabase_configured() and url and service_role_key:
+            # 1a. Coba Endpoint Supabase Auth Admin (Create User dengan email_confirm=True)
             try:
-                # Coba signup via auth/v1/signup
-                signup_url = f"{url}/auth/v1/signup"
-                resp = requests.post(
-                    signup_url,
+                admin_url = f"{url}/auth/v1/admin/users"
+                admin_resp = requests.post(
+                    admin_url,
                     headers={
-                        "apikey": key,
-                        "Authorization": f"Bearer {key}",
+                        "apikey": service_role_key,
+                        "Authorization": f"Bearer {service_role_key}",
                         "Content-Type": "application/json",
                     },
                     json={
                         "email": email,
                         "password": password,
-                        "data": {
+                        "email_confirm": True,
+                        "user_metadata": {
                             "full_name": full_name,
                             "plan_type": plan_type,
                         }
                     },
                     timeout=15
                 )
-                if resp.status_code in (200, 201):
-                    res_json = resp.json()
+                if admin_resp.status_code in (200, 201):
+                    res_json = admin_resp.json()
                     user_obj = res_json.get("user") or res_json
                     if user_obj and "id" in user_obj:
                         user_id = user_obj["id"]
                     created_user = user_obj
+                    logger.info(f"User {email} created via Supabase Auth Admin API.")
                 else:
-                    logger.warning(f"Supabase auth signup notice [{resp.status_code}]: {resp.text}")
+                    logger.warning(f"Supabase Admin API notice [{admin_resp.status_code}]: {admin_resp.text}")
+                    # 1b. Fallback ke standard signup
+                    signup_url = f"{url}/auth/v1/signup"
+                    signup_resp = requests.post(
+                        signup_url,
+                        headers={
+                            "apikey": service_role_key,
+                            "Authorization": f"Bearer {service_role_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "email": email,
+                            "password": password,
+                            "data": {
+                                "full_name": full_name,
+                                "plan_type": plan_type,
+                            }
+                        },
+                        timeout=15
+                    )
+                    if signup_resp.status_code in (200, 201):
+                        s_json = signup_resp.json()
+                        u_obj = s_json.get("user") or s_json
+                        if u_obj and "id" in u_obj:
+                            user_id = u_obj["id"]
+                        created_user = u_obj
             except Exception as auth_err:
                 logger.warning(f"Supabase Auth registration notice: {auth_err}")
 
