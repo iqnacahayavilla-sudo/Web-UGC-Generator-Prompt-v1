@@ -220,13 +220,19 @@ export default function Studio() {
       setLockedCreator(creatorKey(creator));
       setGenError(null);
       await refreshCredits();
-      toast.success(hasPrevious ? "Prompt berhasil diperbarui!" : "Prompt video UGC berhasil dibuat! (-1 Token)");
+      const deducted = data?.credit_status?.deducted || 10;
+      toast.success(hasPrevious ? "Prompt berhasil diperbarui!" : `Prompt video UGC berhasil dibuat! (-${deducted} Token)`);
     } catch (e) {
       const detail = e?.response?.data?.detail;
-      const isCreditError = e?.response?.status === 403 || (detail && typeof detail === "object" && detail.code === "KREDIT_HABIS");
+      const isCreditError =
+        e?.response?.status === 403 ||
+        (detail && typeof detail === "object" && (detail.code === "KREDIT_TIDAK_CUKUP" || detail.code === "KREDIT_HABIS"));
 
       if (isCreditError) {
-        toast.error("Saldo kredit Anda telah habis. Silakan pilih paket langganan atau top up.");
+        const errorMsg =
+          (detail && typeof detail === "object" && detail.message) ||
+          "Kredit tidak cukup. Minimal saldo yang dibutuhkan adalah 10 credits. Silakan lakukan top up atau upgrade paket.";
+        toast.error(errorMsg);
         openPricingModal();
         if (!hasPrevious) setView("wizard");
       } else {

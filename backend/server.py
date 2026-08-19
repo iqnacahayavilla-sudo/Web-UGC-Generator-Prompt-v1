@@ -21,6 +21,7 @@ from services.ai_service import (
 )
 from services.credit_service import CreditService, PLAN_CATALOG, TOPUP_PACKAGES
 from services.payment_service import PaymentService
+from services.supabase_service import SupabaseService, GENERATE_CREDIT_COST
 
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 db_name = os.environ.get('DB_NAME', 'ugc_prompt_studio')
@@ -28,6 +29,7 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[db_name]
 
 credit_service = CreditService(db)
+supabase_service = SupabaseService(db)
 payment_service = PaymentService(credit_service)
 
 app = FastAPI()
@@ -36,6 +38,13 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+def safe_print(*args):
+    try:
+        text = " ".join(str(a) for a in args)
+        print(text.encode("ascii", errors="replace").decode("ascii"))
+    except Exception:
+        pass
 
 ALLOWED_EXT = {"jpg", "jpeg", "png", "webp"}
 MAX_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -257,13 +266,13 @@ async def analyze_product(file: UploadFile = File(...)):
         logger.warning(f"Image analysis exception in /api/analyze: {e}. Activating mock fallback.")
         analysis = ai_service.get_mock_product_analysis()
 
-    print("\n==================== [SERVER LOG - PRODUCT ANALYSIS RESULT] ====================")
-    print(f"Project ID: {project_id}")
-    print(f"Product Name: {analysis.get('product_name')}")
-    print(f"Product Category: {analysis.get('category')}")
-    print(f"Product Type: {analysis.get('product_type')}")
-    print(f"Raw Analysis Keys: {list(analysis.keys())}")
-    print("=================================================================================\n")
+    safe_print("\n==================== [SERVER LOG - PRODUCT ANALYSIS RESULT] ====================")
+    safe_print(f"Project ID: {project_id}")
+    safe_print(f"Product Name: {analysis.get('product_name')}")
+    safe_print(f"Product Category: {analysis.get('category')}")
+    safe_print(f"Product Type: {analysis.get('product_type')}")
+    safe_print(f"Raw Analysis Keys: {list(analysis.keys())}")
+    safe_print("=================================================================================\n")
 
     project = {
         "id": project_id,
@@ -299,26 +308,29 @@ async def serve_file(path: str):
                     headers={"Cache-Control": "public, max-age=86400"})
 
 
-# ---------- Generate prompt with Credit Validation ----------
+# ---------- Generate prompt with Supabase Credit Validation & Project Saving ----------
 @api_router.post("/projects/{project_id}/generate")
 async def generate_prompt(project_id: str, req: GenerateRequest):
     user_id = req.user_id or "guest-user"
+    credit_cost = GENERATE_CREDIT_COST  # Default 10 credits
 
-    # 1. Validasi saldo kredit sebelum generate
+    # 1. Cek apakah credit user cukup sebelum generate; jika credit < 10, kembalikan error 'Kredit tidak cukup'.
     try:
-        user_cred = await credit_service.get_or_create_user_credits(user_id)
-        if user_cred.get("total_credits", 0) < 1:
+        is_enough, total_credits, user_info = await supabase_service.check_user_credits(user_id, required_credits=credit_cost)
+        if not is_enough:
             raise HTTPException(
                 status_code=403,
                 detail={
-                    "code": "KREDIT_HABIS",
-                    "message": "Saldo kredit harian dan bonus token Anda telah habis (0). Silakan lakukan top up kredit atau upgrade paket langganan untuk melanjutkan."
+                    "code": "KREDIT_TIDAK_CUKUP",
+                    "message": f"Kredit tidak cukup. Dibutuhkan minimal {credit_cost} credits untuk membuat prompt video UGC (Saldo Anda: {total_credits} credits).",
+                    "required_credits": credit_cost,
+                    "current_credits": total_credits
                 }
             )
     except HTTPException:
         raise
     except Exception as cred_err:
-        logger.warning(f"Credit validation warning: {cred_err}")
+        logger.warning(f"Credit pre-check warning: {cred_err}")
 
     # 2. Panggil AI Generator dengan Fallback Otomatis
     try:
@@ -342,18 +354,19 @@ async def generate_prompt(project_id: str, req: GenerateRequest):
             language=req.language
         )
 
-    print("\n==================== [SERVER LOG - GENERATED PROMPT RESULT] ====================")
-    print(f"Project ID: {project_id}")
-    print(f"Generated Summary: {result.get('summary')}")
-    print(f"Master Prompt Preview: {str(result.get('master_prompt'))[:250]}...")
-    print(f"Scenes Count: {len(result.get('scenes', []))}")
-    print("=================================================================================\n")
+    safe_print("\n==================== [SERVER LOG - GENERATED PROMPT RESULT] ====================")
+    safe_print(f"Project ID: {project_id}")
+    safe_print(f"User ID: {user_id}")
+    safe_print(f"Generated Summary: {result.get('summary')}")
+    safe_print(f"Master Prompt Preview: {str(result.get('master_prompt'))[:250]}...")
+    safe_print(f"Scenes Count: {len(result.get('scenes', []))}")
+    safe_print("=================================================================================\n")
 
-    # 3. Potong 1 token kredit secara atomik & catat riwayat
+    # 3. Setiap kali user berhasil generate, lakukan deduksi credit di tabel profiles Supabase sebanyak 10 credits
     try:
-        credit_deduction = await credit_service.consume_credits(
+        credit_deduction = await supabase_service.deduct_user_credits(
             user_id=user_id,
-            tokens=1,
+            amount=credit_cost,
             category=f"UGC Prompt - {req.video_settings.ugc_style}",
             prompt_result={"summary": result.get("summary")},
             model_used="gemini-flash"
@@ -362,26 +375,19 @@ async def generate_prompt(project_id: str, req: GenerateRequest):
     except Exception as e:
         logger.warning(f"Credit consumption warning: {e}")
 
+    # 4. Simpan hasil JSON prompt beserta user_id ke dalam tabel projects Supabase agar riwayat bisa diakses kembali dari halaman History
     try:
-        await db.projects.update_one(
-            {"id": project_id},
-            {"$set": {
-                "product_analysis": req.product_analysis,
-                "video_settings": req.video_settings.model_dump(),
-                "creator_settings": req.creator_settings.model_dump(),
-                "language": req.language,
-                "generated_prompt": result["master_prompt"],
-                "generated_scenes": result["scenes"],
-                "generated_summary": result["summary"],
-                "character_anchor": result["character_anchor"],
-                "character_bible": result["character_bible"],
-                "product_lock": result["product_lock"],
-                "updated_at": now_iso(),
-            }},
-            upsert=True
+        await supabase_service.save_project(
+            project_id=project_id,
+            user_id=user_id,
+            product_analysis=req.product_analysis,
+            video_settings=req.video_settings.model_dump(),
+            creator_settings=req.creator_settings.model_dump(),
+            language=req.language,
+            prompt_result=result
         )
-    except Exception as db_err:
-        logger.warning(f"Database update warning in serverless: {db_err}")
+    except Exception as save_err:
+        logger.warning(f"Project save warning: {save_err}")
 
     return result
 
@@ -390,8 +396,21 @@ async def generate_prompt(project_id: str, req: GenerateRequest):
 async def get_project(project_id: str):
     project = await db.projects.find_one({"id": project_id}, {"_id": 0})
     if not project:
+        # Coba ambil dari Supabase
+        history = await supabase_service.get_user_projects_history(limit=100)
+        found = next((p for p in history if p.get("id") == project_id), None)
+        if found:
+            return found
         raise HTTPException(status_code=404, detail="Project not found")
     return project
+
+
+# ---------- History & Projects Retrieval ----------
+@api_router.get("/projects")
+@api_router.get("/history")
+async def get_user_history(user_id: str = Query("guest-user"), limit: int = Query(50)):
+    """Mengambil riwayat proyek dan prompt yang pernah di-generate oleh user."""
+    return await supabase_service.get_user_projects_history(user_id=user_id, limit=limit)
 
 
 app.include_router(api_router)

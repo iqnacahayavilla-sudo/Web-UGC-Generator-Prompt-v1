@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- SINERGI VISUAL UGC GENERATOR PROMPT — SUPABASE (POSTGRESQL) SCHEMA
--- SaaS Monetization, User Credits, Subscriptions, & Prompt Logging System
+-- SaaS Monetization, User Credits, Subscriptions, Profiles, & Projects System
 -- Timezone: Asia/Jakarta (WIB, GMT+7) | Reset Schedule: 00:00 WIB
 -- ==============================================================================
 
@@ -31,7 +31,19 @@ CREATE TABLE IF NOT EXISTS public.users (
     updated_at TIMESTAMPTZ DEFAULT (NOW() AT TIME ZONE 'Asia/Jakarta') NOT NULL
 );
 
--- 4. USER CREDITS TABLE
+-- 4. PROFILES TABLE (Fast profile & unified credits access)
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email VARCHAR(255) UNIQUE,
+    full_name VARCHAR(255),
+    avatar_url TEXT,
+    credits INT DEFAULT 110 NOT NULL,
+    plan_type VARCHAR(50) DEFAULT 'free' NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT (NOW() AT TIME ZONE 'Asia/Jakarta') NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT (NOW() AT TIME ZONE 'Asia/Jakarta') NOT NULL
+);
+
+-- 5. USER CREDITS TABLE (Detailed daily quota & reset tracking)
 CREATE TABLE IF NOT EXISTS public.user_credits (
     user_id UUID PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
     daily_quota INT DEFAULT 100 NOT NULL,
@@ -43,7 +55,27 @@ CREATE TABLE IF NOT EXISTS public.user_credits (
     CONSTRAINT check_credits_positive CHECK (daily_credits_remaining >= 0 AND bonus_credits >= 0)
 );
 
--- 5. SUBSCRIPTIONS TABLE
+-- 6. PROJECTS TABLE (Generated UGC prompts and history)
+CREATE TABLE IF NOT EXISTS public.projects (
+    id VARCHAR(255) PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    product_name VARCHAR(255),
+    product_image_path TEXT,
+    product_analysis JSONB,
+    video_settings JSONB,
+    creator_settings JSONB,
+    language VARCHAR(50) DEFAULT 'Bahasa Indonesia',
+    generated_prompt TEXT,
+    generated_scenes JSONB,
+    generated_summary JSONB,
+    character_anchor TEXT,
+    character_bible JSONB,
+    product_lock TEXT,
+    created_at TIMESTAMPTZ DEFAULT (NOW() AT TIME ZONE 'Asia/Jakarta') NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT (NOW() AT TIME ZONE 'Asia/Jakarta') NOT NULL
+);
+
+-- 7. SUBSCRIPTIONS TABLE
 CREATE TABLE IF NOT EXISTS public.subscriptions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
@@ -58,12 +90,12 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
     updated_at TIMESTAMPTZ DEFAULT (NOW() AT TIME ZONE 'Asia/Jakarta') NOT NULL
 );
 
--- 6. PROMPT LOGS TABLE
+-- 8. PROMPT LOGS TABLE
 CREATE TABLE IF NOT EXISTS public.prompt_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     category VARCHAR(100) DEFAULT 'UGC Video Prompt',
-    tokens_used INT DEFAULT 1 NOT NULL,
+    tokens_used INT DEFAULT 10 NOT NULL,
     prompt_result JSONB,
     model_used VARCHAR(100) DEFAULT 'gemini-flash',
     created_at TIMESTAMPTZ DEFAULT (NOW() AT TIME ZONE 'Asia/Jakarta') NOT NULL
@@ -73,10 +105,10 @@ CREATE TABLE IF NOT EXISTS public.prompt_logs (
 -- STORED PROCEDURES & LOGIC
 -- ==============================================================================
 
--- 7. FUNCTION: AUTO RESET CHECK (WIB) & CONSUME TOKENS ATOMICALLY
+-- 9. FUNCTION: AUTO RESET CHECK (WIB) & CONSUME TOKENS ATOMICALLY
 CREATE OR REPLACE FUNCTION public.consume_user_credits(
     p_user_id UUID,
-    p_tokens INT DEFAULT 1,
+    p_tokens INT DEFAULT 10,
     p_category VARCHAR DEFAULT 'UGC Video Prompt',
     p_prompt_result JSONB DEFAULT NULL,
     p_model_used VARCHAR DEFAULT 'gemini-flash'
@@ -118,9 +150,8 @@ BEGIN
         RAISE EXCEPTION 'USER_NOT_FOUND' USING ERRCODE = 'P0002';
     END IF;
 
-    -- 2. Cek Reset Harian Otomatis (Jika hari ini berbeda dari last_reset_date di WIB)
+    -- 2. Cek Reset Harian 00:00 WIB
     IF v_last_reset < v_today THEN
-        -- Tentukan kuota harian berdasarkan paket
         IF v_plan = 'pro' THEN
             v_quota := 1000;
         ELSIF v_plan = 'enterprise' THEN
@@ -128,20 +159,18 @@ BEGIN
         ELSE
             v_quota := 100;
         END IF;
-
+        
         v_daily_rem := v_quota;
         v_last_reset := v_today;
     END IF;
 
-    -- 3. Hitung Total Kredit Tersedia
+    -- 3. Cek Ketersediaan Total Saldo
     v_total_available := v_daily_rem + v_bonus_rem;
-
     IF v_total_available < p_tokens THEN
-        -- Kredit tidak mencukupi (Error 403 Kredit Habis)
         RETURN jsonb_build_object(
             'success', false,
-            'error_code', 'KREDIT_HABIS',
-            'message', 'Saldo kredit Anda tidak mencukupi. Silakan lakukan top up atau upgrade paket.',
+            'error_code', 'KREDIT_TIDAK_CUKUP',
+            'message', 'Kredit tidak cukup. Minimal saldo yang dibutuhkan adalah ' || p_tokens || ' credits.',
             'daily_credits_remaining', v_daily_rem,
             'bonus_credits', v_bonus_rem,
             'total_credits', v_total_available,
@@ -160,7 +189,7 @@ BEGIN
         v_bonus_rem := v_bonus_rem - v_deduct_bonus;
     END IF;
 
-    -- 5. Update Database
+    -- 5. Update Database user_credits & profiles
     UPDATE public.user_credits
     SET 
         daily_credits_remaining = v_daily_rem,
@@ -169,6 +198,12 @@ BEGIN
         last_reset_date = v_last_reset,
         updated_at = (NOW() AT TIME ZONE 'Asia/Jakarta')
     WHERE user_id = p_user_id;
+
+    UPDATE public.profiles
+    SET
+        credits = (v_daily_rem + v_bonus_rem),
+        updated_at = (NOW() AT TIME ZONE 'Asia/Jakarta')
+    WHERE id = p_user_id;
 
     -- 6. Catat Log Prompt
     INSERT INTO public.prompt_logs (
@@ -192,7 +227,7 @@ BEGIN
 END;
 $$;
 
--- 8. FUNCTION: TOP UP BONUS CREDITS ATAU UPGRADE PLAN
+-- 10. FUNCTION: TOP UP BONUS CREDITS ATAU UPGRADE PLAN
 CREATE OR REPLACE FUNCTION public.topup_user_credits(
     p_user_id UUID,
     p_bonus_tokens INT DEFAULT 0,
@@ -212,6 +247,10 @@ BEGIN
     IF p_new_plan IS NOT NULL THEN
         UPDATE public.users 
         SET plan_type = p_new_plan, updated_at = (NOW() AT TIME ZONE 'Asia/Jakarta')
+        WHERE id = p_user_id;
+
+        UPDATE public.profiles
+        SET plan_type = p_new_plan::text, updated_at = (NOW() AT TIME ZONE 'Asia/Jakarta')
         WHERE id = p_user_id;
 
         -- Tentukan kuota harian baru
@@ -246,6 +285,10 @@ BEGIN
         WHERE user_id = p_user_id;
     END IF;
 
+    UPDATE public.profiles
+    SET credits = (SELECT daily_credits_remaining + bonus_credits FROM public.user_credits WHERE user_id = p_user_id)
+    WHERE id = p_user_id;
+
     RETURN jsonb_build_object(
         'success', true,
         'bonus_added', p_bonus_tokens,
@@ -254,7 +297,7 @@ BEGIN
 END;
 $$;
 
--- 9. TRIGGER: OTOMATIS INISIALISASI USER BARU DARI AUTH.USERS
+-- 11. TRIGGER: OTOMATIS INISIALISASI USER BARU DARI AUTH.USERS
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -266,6 +309,15 @@ BEGIN
         NEW.id,
         NEW.email,
         COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
+        'free'
+    ) ON CONFLICT (id) DO NOTHING;
+
+    INSERT INTO public.profiles (id, email, full_name, credits, plan_type)
+    VALUES (
+        NEW.id,
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
+        110, -- 100 kuota harian + 10 bonus token
         'free'
     ) ON CONFLICT (id) DO NOTHING;
 
@@ -287,17 +339,25 @@ CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- 10. ROW LEVEL SECURITY (RLS) POLICIES
+-- 12. ROW LEVEL SECURITY (RLS) POLICIES
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_credits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.prompt_logs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view their own profile" ON public.users
+CREATE POLICY "Users can view their own profile users" ON public.users
     FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Users can view and update their own profiles" ON public.profiles
+    FOR ALL USING (auth.uid() = id);
 
 CREATE POLICY "Users can view their own credits" ON public.user_credits
     FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view and manage their own projects" ON public.projects
+    FOR ALL USING (auth.uid() = user_id OR auth.uid() IS NULL);
 
 CREATE POLICY "Users can view their own subscriptions" ON public.subscriptions
     FOR SELECT USING (auth.uid() = user_id);
