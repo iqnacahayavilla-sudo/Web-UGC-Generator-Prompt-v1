@@ -234,3 +234,110 @@ export async function adjustMemberCreditsByAdmin(userId, amount, mode = "add") {
     new_credits: newBalance,
   };
 }
+
+/**
+ * Menyimpan data proyek prompt dan memotong saldo token menggunakan Supabase Admin (Bypass RLS)
+ * Menjamin record proyek masuk ke tabel `projects` dan saldo profil terpotong sebelum Result View ditampilkan.
+ */
+export async function saveProjectAndDeductCredits({
+  userId,
+  projectId,
+  productAnalysis,
+  videoSettings,
+  creatorSettings,
+  language,
+  masterPrompt,
+  scenes,
+  summary,
+  characterAnchor,
+  tokens = 10,
+}) {
+  const nowIso = new Date().toISOString();
+  const effectiveProjectId = projectId || `proj_${Date.now()}`;
+  const prodName = productAnalysis?.product_name || summary?.product || "Produk UGC";
+
+  // 1. Insert/Upsert ke tabel `projects`
+  try {
+    const { error: projErr } = await supabaseAdmin.from("projects").upsert([
+      {
+        id: effectiveProjectId,
+        user_id: userId || null,
+        product_name: prodName,
+        product_analysis: productAnalysis,
+        video_settings: videoSettings,
+        creator_settings: creatorSettings,
+        language: language,
+        generated_prompt: masterPrompt,
+        generated_scenes: scenes,
+        generated_summary: summary,
+        character_anchor: characterAnchor,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ]);
+
+    if (projErr) {
+      console.warn("Supabase projects upsert notice:", projErr.message);
+    }
+  } catch (e) {
+    console.warn("Error saving project:", e);
+  }
+
+  // 2. Potong kredit pengguna (10 token) di tabel `profiles` dan `user_credits`
+  let remainingCredits = null;
+  if (userId) {
+    try {
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("credits")
+        .eq("id", userId)
+        .single();
+
+      const current = profile?.credits ?? 100;
+      remainingCredits = Math.max(0, current - tokens);
+
+      await supabaseAdmin
+        .from("profiles")
+        .update({ credits: remainingCredits, updated_at: nowIso })
+        .eq("id", userId);
+
+      await supabaseAdmin
+        .from("user_credits")
+        .update({ daily_credits_remaining: remainingCredits, updated_at: nowIso })
+        .eq("user_id", userId);
+    } catch (e) {
+      console.warn("Error deducting credits in supabaseAdmin:", e);
+    }
+  }
+
+  return {
+    success: true,
+    project_id: effectiveProjectId,
+    deducted: tokens,
+    remaining_credits: remainingCredits,
+  };
+}
+
+/**
+ * Mengambil daftar riwayat proyek member via Supabase Admin (Bypass RLS)
+ */
+export async function fetchMemberHistoryProjects(userId) {
+  if (!userId) return [];
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("projects")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.warn("fetchMemberHistoryProjects error:", error.message);
+      return [];
+    }
+
+    return data || [];
+  } catch (e) {
+    console.warn("Error in fetchMemberHistoryProjects:", e);
+    return [];
+  }
+}

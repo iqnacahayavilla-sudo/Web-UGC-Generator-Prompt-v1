@@ -53,10 +53,12 @@
 
 html {
     color-scheme: light dark;
+    overflow-x: hidden;
 }
 
 body {
     margin: 0;
+    overflow-x: hidden;
     font-family: "Manrope", -apple-system, BlinkMacSystemFont, sans-serif;
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));

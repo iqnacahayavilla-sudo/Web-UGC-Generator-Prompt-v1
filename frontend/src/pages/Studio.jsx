@@ -18,9 +18,12 @@ import { Logo } from "@/components/Logo";
 import { OptionGroup } from "@/components/studio/OptionGroup";
 import { StepProgress } from "@/components/studio/StepProgress";
 import { useCredits } from "@/context/CreditContext";
-import { useAuth } from "@/context/AuthContext";
 import { analyzeImage, generatePrompt, getUserProjects } from "@/lib/api";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  saveProjectAndDeductCredits,
+  fetchMemberHistoryProjects,
+} from "@/lib/supabaseAdmin";
 import {
   ASPECT_RATIOS, DURATIONS, UGC_STYLES, HOOK_STYLES, SELLING_STYLES,
   GENDERS, AGES, PERSONALITIES, SPEAKING_STYLES, LOCATIONS, LANGUAGES,
@@ -299,27 +302,14 @@ export default function Studio() {
     setMaxReached((m) => Math.max(m, i));
   };
 
-  // Fetch Member History from Supabase / MongoDB
+  // Fetch Member History from Supabase Admin (Bypass RLS)
   const fetchMemberHistory = useCallback(async () => {
     if (!user?.id) return;
     setLoadingHistory(true);
     try {
-      // 1. Coba ambil dari tabel projects Supabase
-      const { data, error } = await supabase
-        .from("projects")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (!error && Array.isArray(data) && data.length > 0) {
+      const data = await fetchMemberHistoryProjects(user.id);
+      if (Array.isArray(data)) {
         setHistoryList(data);
-        return;
-      }
-
-      // 2. Fallback via backend endpoint
-      const res = await getUserProjects(user.id);
-      if (res?.success && Array.isArray(res.projects)) {
-        setHistoryList(res.projects);
       }
     } catch (err) {
       console.warn("Gagal memuat riwayat prompt:", err);
@@ -443,12 +433,29 @@ export default function Studio() {
         character_anchor: reuse ? characterAnchor : null,
         reuse_character: reuse,
       });
+
+      // 1. Simpan proyek ke tabel `projects` dan potong 10 token di Supabase menggunakan supabaseAdmin (Bypass RLS)
+      await saveProjectAndDeductCredits({
+        userId: user?.id,
+        projectId: effectiveProjectId,
+        productAnalysis: effectiveAnalysis,
+        videoSettings: video,
+        creatorSettings: creator,
+        language,
+        masterPrompt: data.master_prompt,
+        scenes: data.scenes,
+        summary: data.summary,
+        characterAnchor: data.character_anchor || (reuse ? characterAnchor : null),
+        tokens: 10,
+      });
+
+      // 2. Set result, sinkronisasi kredit & muat riwayat real-time sebelum Result View ditampilkan
       setResult(data);
       if (data.character_anchor) setCharacterAnchor(data.character_anchor);
       setLockedCreator(creatorKey(creator));
       setGenError(null);
       await refreshCredits();
-      fetchMemberHistory();
+      await fetchMemberHistory();
       const deducted = data?.credit_status?.deducted || 10;
       toast.success(hasPrevious ? "Prompt berhasil diperbarui!" : `Prompt video UGC berhasil dibuat! (-${deducted} Token)`);
     } catch (e) {
@@ -543,29 +550,48 @@ Product Lock: ${prodName} kemasan asli sesuai foto produk.
 
 [NEGATIVE CONSTRAINTS]: No CGI, no stiff artificial actor, maintain authentic handheld motion and natural phone lens realism.`;
 
+        const fallbackSummary = {
+          product: prodName,
+          duration: video.duration || "15 Detik",
+          aspect_ratio: video.aspect_ratio || "9:16 Vertikal",
+          ugc_style: video.ugc_style || "Review Produk",
+          creator: `${creator.gender || "Perempuan"}, ${creator.age || "20-an"}`,
+          language: language || "Bahasa Indonesia",
+        };
+
+        const fallbackAnchor = `Kreator ${creator.gender || "Perempuan"} ${creator.age || "20-an"} dengan gaya ${creator.speaking_style || "santai"} di ${creator.location || "ruangan modern"}.`;
+
         const fallbackData = {
           success: true,
           project_id: effectiveProjectId,
           master_prompt: fallbackMasterPrompt,
           scenes: fallbackScenes,
-          summary: {
-            product: prodName,
-            duration: video.duration || "15 Detik",
-            aspect_ratio: video.aspect_ratio || "9:16 Vertikal",
-            ugc_style: video.ugc_style || "Review Produk",
-            creator: `${creator.gender || "Perempuan"}, ${creator.age || "20-an"}`,
-            language: language || "Bahasa Indonesia",
-          },
-          character_anchor: `Kreator ${creator.gender || "Perempuan"} ${creator.age || "20-an"} dengan gaya ${creator.speaking_style || "santai"} di ${creator.location || "ruangan modern"}.`,
+          summary: fallbackSummary,
+          character_anchor: fallbackAnchor,
           credit_status: { deducted: 10, remaining: Math.max(0, totalCredits - 10) }
         };
+
+        // Simpan proyek fallback ke database via supabaseAdmin (Bypass RLS)
+        await saveProjectAndDeductCredits({
+          userId: user?.id,
+          projectId: effectiveProjectId,
+          productAnalysis: effectiveAnalysis,
+          videoSettings: video,
+          creatorSettings: creator,
+          language,
+          masterPrompt: fallbackMasterPrompt,
+          scenes: fallbackScenes,
+          summary: fallbackSummary,
+          characterAnchor: fallbackAnchor,
+          tokens: 10,
+        });
 
         setResult(fallbackData);
         if (fallbackData.character_anchor) setCharacterAnchor(fallbackData.character_anchor);
         setLockedCreator(creatorKey(creator));
         setGenError(null);
         await refreshCredits();
-        fetchMemberHistory();
+        await fetchMemberHistory();
         toast.success("Prompt video UGC berhasil disusun!");
       }
     } finally {
@@ -629,7 +655,7 @@ Product Lock: ${prodName} kemasan asli sesuai foto produk.
   if (view === "result") {
     const summary = result?.summary || {};
     return (
-      <div className="min-h-screen bg-background text-foreground transition-colors duration-200">
+      <div className="min-h-screen overflow-x-hidden bg-background text-foreground transition-colors duration-200">
         <Navbar />
         <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 md:px-8 sm:py-8">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -876,7 +902,7 @@ Product Lock: ${prodName} kemasan asli sesuai foto produk.
 
   // ----------------- WIZARD VIEW -----------------
   return (
-    <div className="min-h-screen bg-background text-foreground transition-colors duration-200">
+    <div className="min-h-screen overflow-x-hidden bg-background text-foreground transition-colors duration-200">
       <Navbar />
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 md:px-8 sm:py-8">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

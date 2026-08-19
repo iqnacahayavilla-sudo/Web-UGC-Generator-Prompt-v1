@@ -241,13 +241,13 @@ export default function Landing() {
   )}`;
 
   return (
-    <div id="top" className="min-h-screen bg-background text-foreground transition-colors duration-200 selection:bg-primary/20 selection:text-primary">
+    <div id="top" className="min-h-screen overflow-x-hidden bg-background text-foreground transition-colors duration-200 selection:bg-primary/20 selection:text-primary">
       <Navbar />
 
       {/* MEMBER DASHBOARD & QUICK STATS SECTION */}
-      <section className="relative overflow-hidden border-b border-border/80 bg-gradient-to-b from-primary/10 via-background to-background">
+      <section className="relative overflow-x-hidden border-b border-border/80 bg-gradient-to-b from-primary/10 via-background to-background">
         <div className="absolute inset-0 dot-grid opacity-70 pointer-events-none" />
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] sm:w-[500px] h-[250px] sm:h-[300px] bg-primary/15 rounded-full blur-[110px] pointer-events-none" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg h-64 sm:h-80 bg-primary/15 rounded-full blur-[110px] pointer-events-none" />
 
         <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 md:px-8 sm:py-12">
           {/* Header Greeting Banner */}
@@ -277,8 +277,8 @@ export default function Landing() {
             </div>
 
             <div className="flex items-center gap-3">
-              <Link to="/create" data-testid="hero-create-btn">
-                <Button className="h-12 sm:h-13 gap-2 rounded-xl px-6 font-bold shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]">
+              <Link to="/create" data-testid="hero-create-btn" className="w-full sm:w-auto">
+                <Button className="h-12 sm:h-13 w-full sm:w-auto gap-2 rounded-xl px-6 font-bold shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]">
                   <Sparkles className="h-4 w-4" />
                   <span>Buka Studio Generator</span>
                   <ArrowRight className="h-4 w-4" />
@@ -288,7 +288,7 @@ export default function Landing() {
           </div>
 
           {/* 3 QUICK STATS CARD (WIDGET MEMBER VIP) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
             {/* Widget 1: Status Akun */}
             <div className="rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-sm flex flex-col justify-between transition-all hover:border-emerald-500/40 hover:shadow-md">
               <div>
@@ -505,7 +505,7 @@ export default function Landing() {
           </div>
 
           {/* Prompt Cards Grid */}
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
             {filteredVault.map((item) => {
               const isCopied = copiedPromptId === item.id;
               return (
