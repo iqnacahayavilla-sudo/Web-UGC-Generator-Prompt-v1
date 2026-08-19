@@ -5,8 +5,9 @@ Features:
 - Pre-call rate limiting delay (2 seconds)
 - Automatic retry up to 3x with dynamic wait extraction and progressive backoff
 - Multi-flash-model quota fallback (separate per-model rate limit buckets)
-- Detailed error logging in console
+- Detailed error logging & raw AI output debugging in console
 - Pillow image parsing for robust vision input
+- Strict JSON refinement prompt (_create_refinement_prompt) to repair malformed responses
 """
 import os
 import io
@@ -83,7 +84,7 @@ def _classify(exc: Exception) -> str:
     if status == 429 or has("429", "rate limit", "rate_limit", "too many requests", "resource_exhausted", "resourceexhausted"):
         return RATE_LIMITED
     if has("billing", "exceeded your current quota", "credit", "insufficient_quota"):
-        return RATE_LIMITED  # In free tier, quota exceeded is a 429 rate limit that resets in seconds
+        return RATE_LIMITED
     if status in (408, 504) or has("timeout", "timed out", "deadline"):
         return TIMEOUT
     if (isinstance(status, int) and status >= 500) or has(
@@ -99,7 +100,6 @@ def _classify(exc: Exception) -> str:
 def _extract_retry_delay(exc: Exception, default_wait: float) -> float:
     """Extract recommended retry delay from Google API error message if available."""
     msg = str(exc)
-    # Search for "retry in 19.15s" or "seconds: 19"
     match = re.search(r"retry in ([0-9]+(?:\.[0-9]+)?)s", msg, re.IGNORECASE)
     if match:
         try:
@@ -115,19 +115,58 @@ def _extract_retry_delay(exc: Exception, default_wait: float) -> float:
     return default_wait
 
 
+def _create_refinement_prompt(raw_text: str, error_details: str = "") -> str:
+    """
+    Membuat prompt refinement yang sangat deskriptif dan ketat untuk memaksa
+    AI memperbaiki dan menghasilkan struktur JSON murni yang 100% valid sesuai RFC 8259.
+    """
+    return (
+        "CRITICAL INSTRUCTION: FIX AND FORMAT AS 100% VALID RFC-8259 JSON ONLY.\n\n"
+        "The previous response produced malformed or unparseable JSON.\n"
+        f"Specific parsing issue encountered: {error_details}\n\n"
+        "STRICT REQUIREMENTS FOR YOUR OUTPUT:\n"
+        "1. Fix all JSON syntax errors, missing quotes, unescaped characters, or broken brackets.\n"
+        "2. All keys and string values MUST be enclosed in double quotes (\").\n"
+        "3. Internal double quotes inside text strings MUST be properly escaped as \\\".\n"
+        "4. Internal newlines inside strings MUST be formatted as \\n, not actual unescaped line breaks.\n"
+        "5. Remove any trailing commas before closing braces (} or ]).\n"
+        "6. Do NOT include markdown code blocks (```json ... ```) or conversational commentary.\n"
+        "7. Start your response directly with '{' and end directly with '}'.\n\n"
+        f"RAW MALFORMED CONTENT TO REPAIR:\n{raw_text}\n"
+    )
+
+
 def _extract_json(text: str) -> dict:
-    """Robustly pull a JSON object out of an LLM response."""
+    """Robustly pull a JSON object out of an LLM response with detailed debug logging."""
     if not text or not text.strip():
+        logger.error("[RAW AI RESPONSE IS EMPTY]")
         raise ValueError("Empty AI response")
+
     cleaned = text.strip()
+    # Remove markdown codeblock wrapper if present
     cleaned = re.sub(r"^```(?:json)?", "", cleaned, flags=re.IGNORECASE).strip()
     cleaned = re.sub(r"```$", "", cleaned).strip()
+
     try:
         return json.loads(cleaned)
-    except JSONDecodeError:
+    except JSONDecodeError as err:
+        # Cetak output asli untuk debugging langsung di terminal
+        print(f"\n==================== [DEBUG AI RAW OUTPUT - JSON ERROR] ====================")
+        print(f"Error Message: {err}")
+        print(f"--- RAW RESPONSE START (Length: {len(text)} chars) ---")
+        print(text)
+        print(f"--- RAW RESPONSE END ---")
+        print(f"============================================================================\n")
+        logger.warning(f"[JSON DECODE ERROR] {err}. Attempting regex fallback extraction...")
+
+        # Fallback 1: Extract first outer {...} block
         match = re.search(r"\{.*\}", cleaned, re.DOTALL)
         if match:
-            return json.loads(match.group(0))
+            try:
+                return json.loads(match.group(0))
+            except JSONDecodeError:
+                pass
+
         raise
 
 
@@ -144,7 +183,7 @@ async def _execute_with_model_fallback(operation_name: str, fn_with_model):
             err_msg = str(exc)
             is_model_missing = "not found" in err_msg.lower() or "no longer available" in err_msg.lower() or "404" in err_msg
             is_rate_limited = "429" in err_msg or "resource_exhausted" in err_msg.lower()
-            
+
             if is_model_missing:
                 logger.warning(f"Model {model_name} tidak ditemukan, beralih ke model flash berikutnya... ({err_msg[:80]})")
                 last_exception = exc
@@ -152,7 +191,6 @@ async def _execute_with_model_fallback(operation_name: str, fn_with_model):
             elif is_rate_limited:
                 logger.warning(f"Model {model_name} terkena limit per-model, mencoba model flash alternatif untuk mendapatkan kuota terpisah...")
                 last_exception = exc
-                # Try next model before sleeping
                 continue
             else:
                 raise exc
@@ -231,7 +269,23 @@ async def analyze_image_json(session_id: str, system: str, prompt: str, image_by
                 None,
                 lambda: model.generate_content([prompt, pil_img]),
             )
-            return _extract_json(response.text)
+            raw_text = response.text if hasattr(response, "text") else str(response)
+            
+            # Print log respon AI asli untuk mempermudah debugging
+            print(f"\n[AI DEBUG LOG - ANALYZE IMAGE] (Model: {model_name}) Raw response ({len(raw_text)} chars):\n{raw_text[:400]}...\n")
+            
+            try:
+                return _extract_json(raw_text)
+            except Exception as parse_err:
+                logger.warning(f"Percobaan parsing gagal ({parse_err}). Mencoba self-refinement JSON...")
+                refinement_prompt = _create_refinement_prompt(raw_text, str(parse_err))
+                refine_resp = await loop.run_in_executor(
+                    None,
+                    lambda: model.generate_content(refinement_prompt)
+                )
+                refined_text = refine_resp.text if hasattr(refine_resp, "text") else str(refine_resp)
+                print(f"\n[AI DEBUG LOG - REFINEMENT RESULT]:\n{refined_text}\n")
+                return _extract_json(refined_text)
 
         return await _execute_with_model_fallback("analyze_image", call_model)
 
@@ -259,7 +313,23 @@ async def generate_json(session_id: str, system: str, prompt: str) -> dict:
                 None,
                 lambda: model.generate_content(prompt),
             )
-            return _extract_json(response.text)
+            raw_text = response.text if hasattr(response, "text") else str(response)
+            
+            # Print log respon AI asli untuk mempermudah debugging
+            print(f"\n[AI DEBUG LOG - GENERATE PROMPT] (Model: {model_name}) Raw response ({len(raw_text)} chars):\n{raw_text[:400]}...\n")
+
+            try:
+                return _extract_json(raw_text)
+            except Exception as parse_err:
+                logger.warning(f"Percobaan parsing gagal ({parse_err}). Mencoba self-refinement JSON...")
+                refinement_prompt = _create_refinement_prompt(raw_text, str(parse_err))
+                refine_resp = await loop.run_in_executor(
+                    None,
+                    lambda: model.generate_content(refinement_prompt)
+                )
+                refined_text = refine_resp.text if hasattr(refine_resp, "text") else str(refine_resp)
+                print(f"\n[AI DEBUG LOG - REFINEMENT RESULT]:\n{refined_text}\n")
+                return _extract_json(refined_text)
 
         return await _execute_with_model_fallback("generate_prompt", call_model)
 

@@ -253,6 +253,12 @@ async def analyze_product(file: UploadFile = File(...)):
     project_id = str(uuid.uuid4())
     try:
         analysis = await product_analysis.analyze(project_id, data)
+        print("\n==================== [SERVER LOG - PRODUCT ANALYSIS RESULT] ====================")
+        print(f"Project ID: {project_id}")
+        print(f"Product Category: {analysis.get('category')}")
+        print(f"Visual Details: {analysis.get('visual_details')}")
+        print(f"Raw Analysis Keys: {list(analysis.keys())}")
+        print("=================================================================================\n")
     except AIError as e:
         logger.error(f"Image analysis failed: classification={e.classification} message={e}")
         if e.classification in (RATE_LIMITED, QUOTA_EXCEEDED):
@@ -329,6 +335,12 @@ async def generate_prompt(project_id: str, req: GenerateRequest):
             character_anchor=req.character_anchor,
             reuse_character=req.reuse_character,
         )
+        print("\n==================== [SERVER LOG - GENERATED PROMPT RESULT] ====================")
+        print(f"Project ID: {project_id}")
+        print(f"Generated Summary: {result.get('summary')}")
+        print(f"Master Prompt Preview: {str(result.get('master_prompt'))[:300]}...")
+        print(f"Scenes Count: {len(result.get('scenes', []))}")
+        print("=================================================================================\n")
     except AIError as e:
         logger.error(f"Prompt generation failed: classification={e.classification} status={e.status}")
         raise _ai_error_response(e)
