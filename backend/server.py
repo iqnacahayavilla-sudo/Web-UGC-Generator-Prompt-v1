@@ -339,9 +339,31 @@ async def analyze_product(
     project_id = str(uuid.uuid4())
     try:
         analysis = await product_analysis.analyze(project_id, data)
+    except ai_service.AIError as aie:
+        logger.error(f"[AI] Image analysis error: {aie.classification} - {aie}")
+        status_code = aie.status if aie.status and aie.status >= 400 else 500
+        raise HTTPException(
+            status_code=status_code,
+            detail={
+                "success": False,
+                "error": {
+                    "code": aie.classification,
+                    "message": str(aie)
+                }
+            }
+        )
     except Exception as e:
-        logger.error(f"Image analysis error in /api/analyze: {e}")
-        analysis = ai_service.get_mock_product_analysis("Produk Pilihan")
+        logger.error(f"[AI] Unexpected image analysis error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": f"Gagal menganalisis produk: {str(e)}"
+                }
+            }
+        )
 
     safe_print("\n==================== [SERVER LOG - PRODUCT ANALYSIS RESULT] ====================")
     safe_print(f"Project ID: {project_id}")
@@ -372,6 +394,7 @@ async def analyze_product(
             logger.warning(f"DB project insert notice: {db_err}")
 
     return {
+        "success": True,
         "project_id": project_id,
         "product_image_path": upload["path"],
         "product_analysis": analysis,
@@ -410,7 +433,6 @@ async def generate_prompt(
         is_enough, total_credits, user_info = await supabase_service.check_user_credits(user_id, required_credits=credit_cost)
         user_credits = total_credits
 
-
         if user_credits < 10:
             # Catat log aktivitas gagal karena kredit tidak mencukupi ke MongoDB
             await log_generation_activity(
@@ -431,7 +453,7 @@ async def generate_prompt(
     except Exception as cred_err:
         logger.warning(f"Credit pre-check warning: {cred_err}")
 
-    # 2. Panggil AI Generator dengan Fallback Otomatis
+    # 2. Panggil AI Generator via OpenAI GPT-4o-mini
     try:
         result = await prompt_generator.generate(
             session_id=f"{project_id}-{uuid.uuid4()}",
@@ -444,14 +466,32 @@ async def generate_prompt(
             character_anchor=req.character_anchor,
             reuse_character=req.reuse_character,
         )
-    except Exception as e:
-        logger.warning(f"Prompt generation error intercepted: {e}. Mengaktifkan mock prompt fallback.")
-        result = ai_service.get_mock_generated_prompt(
-            analysis=req.product_analysis,
-            video=req.video_settings.model_dump(),
-            creator=req.creator_settings.model_dump(),
-            language=req.language
+    except ai_service.AIError as aie:
+        logger.error(f"[AI] Prompt generation error: {aie.classification} - {aie}")
+        status_code = aie.status if aie.status and aie.status >= 400 else 500
+        raise HTTPException(
+            status_code=status_code,
+            detail={
+                "success": False,
+                "error": {
+                    "code": aie.classification,
+                    "message": str(aie)
+                }
+            }
         )
+    except Exception as e:
+        logger.error(f"[AI] Unexpected prompt generation error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": f"Gagal membuat prompt UGC: {str(e)}"
+                }
+            }
+        )
+
 
     safe_print("\n==================== [SERVER LOG - GENERATED PROMPT RESULT] ====================")
     safe_print(f"Project ID: {project_id}")

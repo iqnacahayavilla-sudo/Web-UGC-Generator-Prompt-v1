@@ -1,23 +1,40 @@
-"""Backend tests for UGC Prompt Studio (analyze, files, generate)."""
 import os
 import io
-import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://ugc-flow-hub.preview.emergentagent.com").rstrip("/")
-API = f"{BASE_URL}/api"
-IMG_PATH = "/tmp/prod.jpg"
+try:
+    import pytest
+except ImportError:
+    class DummyPytest:
+        def fixture(self, *args, **kwargs):
+            return lambda fn: fn
+    pytest = DummyPytest()
 
 
-@pytest.fixture(scope="session")
-def analyzed():
-    """Upload image once and share across generate tests."""
-    with open(IMG_PATH, "rb") as f:
-        files = {"file": ("prod.jpg", f, "image/jpeg")}
-        r = requests.post(f"{API}/analyze", files=files, timeout=120)
-    assert r.status_code == 200, f"analyze failed: {r.status_code} {r.text}"
-    data = r.json()
-    return data
+if pytest is not None:
+    import os
+    import io
+    import requests
+
+    BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://ugc-flow-hub.preview.emergentagent.com").rstrip("/")
+    API = f"{BASE_URL}/api"
+    IMG_PATH = "/tmp/prod.jpg"
+
+
+if pytest is None:
+    # Skip integration test in local unit test mode
+    pass
+else:
+    @pytest.fixture(scope="session")
+    def analyzed():
+        """Upload image once and share across generate tests."""
+        with open(IMG_PATH, "rb") as f:
+            files = {"file": ("prod.jpg", f, "image/jpeg")}
+            r = requests.post(f"{API}/analyze", files=files, timeout=120)
+        assert r.status_code == 200, f"analyze failed: {r.status_code} {r.text}"
+        data = r.json()
+        return data
+
 
 
 # ---- Branding ----

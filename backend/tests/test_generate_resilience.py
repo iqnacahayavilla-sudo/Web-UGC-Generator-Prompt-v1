@@ -1,28 +1,42 @@
-"""Resilience tests: 5 sequential generations + retry/classification unit tests."""
 import os
 import sys
 import asyncio
-import pytest
 import requests
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+try:
+    import pytest
+except ImportError:
+    class DummyPytest:
+        def fixture(self, *args, **kwargs):
+            return lambda fn: fn
+    pytest = DummyPytest()
+
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://ugc-flow-hub.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 IMG_PATH = "/tmp/prod.jpg"
 
-sys.path.insert(0, "/app/backend")
-from services import ai_service  # noqa: E402
-from services.ai_service import (  # noqa: E402
-    _classify, _run_with_retry, AIError,
-    RATE_LIMITED, VALIDATION_ERROR, PROVIDER_ERROR, QUOTA_EXCEEDED,
-)
+from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-@pytest.fixture(scope="module")
-def analyzed_project():
-    with open(IMG_PATH, "rb") as f:
-        r = requests.post(f"{API}/analyze", files={"file": ("prod.jpg", f, "image/jpeg")}, timeout=120)
-    assert r.status_code == 200, r.text
-    return r.json()
+if pytest is None:
+    # Skip legacy integration tests when pytest is not installed
+    pass
+else:
+    from services import ai_service
+    from services.ai_service import (
+        _classify, AIError,
+        OPENAI_RATE_LIMITED, OPENAI_VALIDATION_ERROR, OPENAI_PROVIDER_ERROR,
+    )
+
 
 
 def _payload(analysis, modifier=None):

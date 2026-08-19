@@ -392,9 +392,27 @@ export default function Studio() {
         throw new Error("Data analisis produk tidak ditemukan");
       }
     } catch (e) {
-      console.error("Vision Analysis Error (OpenAI / Gemini):", e);
-      const errMsg = e?.response?.data?.detail?.message || e?.message || "Gagal menganalisis foto dengan AI";
-      toast.error(`Analisis AI: ${errMsg}. Silakan periksa atau sesuaikan detail produk di bawah.`);
+      console.error("[AI] Vision Analysis Error (OpenAI):", e);
+      const errData = e?.response?.data;
+      const status = e?.response?.status;
+      let errMsg =
+        errData?.error?.message ||
+        errData?.detail?.error?.message ||
+        errData?.detail?.message ||
+        (typeof errData?.detail === "string" ? errData.detail : null) ||
+        e?.message ||
+        "Gagal menganalisis foto produk via backend AI";
+
+      // Map to informative, safe user message
+      if (status === 401 || (typeof errMsg === "string" && errMsg.toLowerCase().includes("auth"))) {
+        errMsg = "OpenAI authentication gagal. Periksa OPENAI_API_KEY di Vercel / server.";
+      } else if (status === 429 || (typeof errMsg === "string" && (errMsg.toLowerCase().includes("quota") || errMsg.toLowerCase().includes("rate limit")))) {
+        errMsg = "Batas kuota/limit OpenAI tercapai. Silakan periksa saldo akun OpenAI.";
+      } else if (status === 400) {
+        errMsg = typeof errMsg === "string" && errMsg.includes("Format") ? errMsg : "Format atau ukuran foto tidak valid (Maksimal 10 MB).";
+      }
+
+      toast.error(`Analisis AI: ${errMsg}`);
       setProjectId(`proj_${Date.now()}`);
       setAnalysis({
         product_name: "",

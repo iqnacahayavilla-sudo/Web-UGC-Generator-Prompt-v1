@@ -1,9 +1,7 @@
-"""Prompt generation orchestrator. Uses the template + AI service.
+"""Prompt generation orchestrator using OpenAI GPT-4o-mini and dynamic templates.
 
-One creative request produces the Character Bible, Character Anchor, Product
-Lock, master prompt and standalone scene prompts. The Character Anchor is
-returned so it can be reused verbatim on regeneration (unless the creator
-settings changed).
+Produces Character Bible, Character Anchor, Product Lock, Master Prompt,
+and standalone structured Scene Prompts.
 """
 import logging
 from services import ai_service, prompt_templates
@@ -18,7 +16,7 @@ _SCENE_FIELDS = [
 
 
 def _normalize_scene(s: dict, index: int) -> dict:
-    """Guarantee every scene has all fields so the UI/copy never breaks."""
+    """Guarantee every scene has all fields so the UI and prompt copy never breaks."""
     s = dict(s or {})
     s["number"] = s.get("number", index)
     s["name"] = s.get("name", f"Scene {index}")
@@ -35,29 +33,30 @@ async def generate(session_id: str, analysis: dict, video: dict, creator: dict,
                    character_anchor: str | None = None,
                    reuse_character: bool = False) -> dict:
     """
-    Eksekusi pembuatan prompt UGC dengan fallback otomatis.
-    Jika terjadi kendala pada Gemini API / Timeout, otomatis mengembalikan prompt UGC terstruktur yang lengkap.
+    Generate UGC video prompt via OpenAI and normalize output.
+    Propagates AIError on failure so production reports true status and safeguards user credits.
     """
-    try:
-        system, user = prompt_templates.build_generation_messages(
-            analysis, video, creator, language, natural_language, modifier,
-            character_anchor=character_anchor, reuse_character=reuse_character,
-        )
-        data = await ai_service.generate_json(
-            session_id=session_id,
-            system=system,
-            prompt=user,
-            analysis_context=analysis,
-            video_context=video,
-            creator_context=creator,
-            language_context=language,
-        )
-    except Exception as e:
-        logger.warning(f"Error pada pemanggilan generate_json: {e}. Mengaktifkan mock prompt fallback.")
-        data = ai_service.get_mock_generated_prompt(analysis, video, creator, language)
+    system, user = prompt_templates.build_generation_messages(
+        analysis, video, creator, language, natural_language, modifier,
+        character_anchor=character_anchor, reuse_character=reuse_character,
+    )
 
-    if not isinstance(data, dict) or not data.get("master_prompt"):
-        data = ai_service.get_mock_generated_prompt(analysis, video, creator, language)
+    data = await ai_service.generate_json(
+        session_id=session_id,
+        system=system,
+        prompt=user,
+        analysis_context=analysis,
+        video_context=video,
+        creator_context=creator,
+        language_context=language,
+    )
+
+    if not isinstance(data, dict):
+        raise ai_service.AIError(
+            ai_service.OPENAI_MALFORMED_RESPONSE,
+            "OpenAI prompt generator returned an invalid data format.",
+            status=502
+        )
 
     master = data.get("master_prompt", "")
     if isinstance(master, dict):
@@ -67,11 +66,6 @@ async def generate(session_id: str, analysis: dict, video: dict, creator: dict,
         anchor = str(anchor)
 
     scenes = [_normalize_scene(s, i) for i, s in enumerate(data.get("scenes", []) or [], start=1)]
-
-    # Jika scenes kosong, gunakan fallback scenes
-    if not scenes:
-        fallback_data = ai_service.get_mock_generated_prompt(analysis, video, creator, language)
-        scenes = [_normalize_scene(s, i) for i, s in enumerate(fallback_data.get("scenes", []), start=1)]
 
     return {
         "master_prompt": (master or "").strip(),
