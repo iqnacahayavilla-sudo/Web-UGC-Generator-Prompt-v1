@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 231 77% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 32% 93%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 214 32% 93%;
+    --muted-foreground: 215 16% 45%;
+    --accent: 231 77% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 88%;
+    --input: 214 32% 88%;
+    --ring: 231 77% 55%;
+    --radius: 0.75rem;
+}
+
+.dark {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+    --card: 222 40% 10%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 40% 10%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 33% 16%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 16%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 217 30% 19%;
+    --input: 217 30% 19%;
+    --ring: 217 91% 60%;
+}
+
+* {
+    border-color: hsl(var(--border));
+}
+
+html {
+    color-scheme: light dark;
+}
+
+body {
+    margin: 0;
+    font-family: "Manrope", -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-display {
+    font-family: "Outfit", sans-serif;
+}
+
+.font-mono-prompt {
+    font-family: "JetBrains Mono", monospace;
+}
+
+::selection {
+    background: hsl(var(--primary) / 0.25);
+    color: hsl(var(--foreground));
+}
+
+/* Subtle dotted grid backdrop for hero / sections */
+.dot-grid {
+    background-image: radial-gradient(hsl(var(--foreground) / 0.12) 1px, transparent 1px);
+    background-size: 24px 24px;
+}
+
+.dark .dot-grid {
+    background-image: radial-gradient(hsl(var(--foreground) / 0.08) 1px, transparent 1px);
+    background-size: 24px 24px;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.25);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.45);
+}
+
+@layer base {
+    [data-debug-wrapper="true"] {
+        display: contents !important;
+    }
+}

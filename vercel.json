@@ -1,0 +1,31 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/static/(.*)",
+      "headers": { "cache-control": "s-maxage=31536000,immutable" },
+      "dest": "/frontend/build/static/$1"
+    },
+    {
+      "src": "/favicon.svg",
+      "dest": "/frontend/build/favicon.svg"
+    },
+    {
+      "src": "/favicon1.svg",
+      "dest": "/frontend/build/favicon1.svg"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/frontend/build/index.html"
+    }
+  ]
+}

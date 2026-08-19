@@ -1,0 +1,51 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# IDE and editors
+.idea/
+.vscode/
+
+# Dependencies
+node_modules/
+/node_modules
+frontend/node_modules/
+backend/venv/
+backend/.venv/
+
+# Production builds & Caches
+/build
+frontend/build/
+dist/
+dist/
+.cache/
+__pycache__/
+*.pyc
+backend/__pycache__/
+backend/services/__pycache__/
+
+# User Uploads & Temporary files
+backend/uploads/
+uploads/
+test_reports/
+.emergent/
+
+# Environment files
+.env
+.env.*
+*.env
+backend/.env
+frontend/.env
+*token.json*
+*credentials.json*
+*.key
+.credentials
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+dump.rdb
+.DS_Store
+
+# Deployment
+.vercel

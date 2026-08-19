@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: sinergi-visual-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.8
+      - key: DB_NAME
+        value: ugc_prompt_studio
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: GEMINI_MODEL
+        value: gemini-1.5-flash
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: MONGO_URL
+        sync: false
+      - key: MIDTRANS_SERVER_KEY
+        sync: false
+      - key: MIDTRANS_CLIENT_KEY
+        sync: false
+      - key: MIDTRANS_IS_PRODUCTION
+        value: "false"

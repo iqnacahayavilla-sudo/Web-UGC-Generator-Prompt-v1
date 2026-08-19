@@ -1,0 +1,111 @@
+{
+  "theme": "light_and_dark",
+  "typography": {
+    "headings": {
+      "fontFamily": "Outfit, sans-serif",
+      "weights": ["400", "500", "600", "700"],
+      "styling": "tracking-tight",
+      "instructions": "Use Outfit for all H1-H4 headings. Keep font sizes fluid but bounded (max text-5xl for hero)."
+    },
+    "body": {
+      "fontFamily": "Manrope, sans-serif",
+      "weights": ["400", "500"],
+      "styling": "leading-relaxed text-base",
+      "instructions": "Use Manrope for paragraphs, labels, and small text. Avoid Inter."
+    },
+    "mono": {
+      "fontFamily": "JetBrains Mono, monospace",
+      "instructions": "Use for the final generated prompt text and any code/prompt blocks."
+    }
+  },
+  "colors": {
+    "archetype": "Swiss Minimalist + Electric Accent",
+    "description": "High contrast neutral base (stark white / deep black) paired with a single, highly saturated accent color to represent AI generation.",
+    "primary_accent": "#2563EB",
+    "instructions": "Update index.css variables to reflect a cleaner neutral palette. --primary should be the accent blue (hsl(221, 83%, 53%)). --background should be pure white in light mode, and very dark gray/black (hsl(220, 10%, 10%)) in dark mode. Avoid colored grays (slate/zinc) - prefer neutral grays."
+  },
+  "layouts": {
+    "global": "Generous spacing. Use p-8 to p-12 for section paddings. Prevent text collision by padding inner containers.",
+    "landing_page": {
+      "hero": "Asymmetric layout. Text left, floating UI elements/images right. Clear CTA.",
+      "features": "Bento grid (TETRIS mode) for 'How it Works' and 'Features'. Varying card sizes, 1px borders."
+    },
+    "app_wizard": {
+      "structure": "Split screen or Sidebar layout on desktop. Left side: Progress steps (Product -> Style -> Creator -> Generate) + Image Preview. Right side: Scrollable form/settings area.",
+      "form_elements": "DO NOT use standard <select> dropdowns for settings (Hook style, Gender, etc.). Instead, use Bento-style selectable Chips or Cards (Grid of buttons) to feel like a modern SaaS."
+    },
+    "result_page": {
+      "structure": "Two columns. Main column: Huge container for the generated Google Flow prompt with syntax highlighting/monospace font and large 'Copy' button. Right column: Stack of 'Quick-Regenerate' action buttons (Make it more viral, Less salesy, etc.)."
+    }
+  },
+  "visual_enhancers": {
+    "surfaces": "Flat solid surfaces with subtle 1px borders (border-border). Avoid excessive glassmorphism except for sticky headers.",
+    "shadows": "Keep it flat by default. Add subtle drop shadows (shadow-md) only on hover or for floating menus.",
+    "radius": "rounded-xl for large containers/cards, rounded-lg for buttons and inputs."
+  },
+  "components": {
+    "buttons": "Large (h-12 or h-14). Primary CTAs should use the strong accent color. Use pill-shaped (rounded-full) or standard rounded-lg. Add hover lifts (-translate-y-1).",
+    "cards": "Minimalist, no heavy shadows. Use cardless sections where possible, relying on whitespace and 1px grid borders.",
+    "upload_zone": "Massive drag-and-drop area for the product photo with dashed border and clear upload icon."
+  },
+  "motion": {
+    "micro_interactions": "Hover states on all interactive elements (transition-transform, background-color shifts).",
+    "step_transitions": "Use framer-motion to slide in new wizard steps (opacity 0 to 1, y: 10 to 0) to avoid jarring page jumps."
+  },
+  "media": {
+    "instructions": "Use standard HTML <img> or React lucide icons. No 3D libraries needed for this clean SaaS MVP.",
+    "image_urls": {
+      "landing_hero": [
+        {
+          "url": "https://images.unsplash.com/photo-1759393852314-59dc00faeed3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwzfHxjcmVhdG9yJTIwcmVjb3JkaW5nJTIwdmlkZW8lMjBzbWFydHBob25lfGVufDB8fHx8MTc4NjgyMzE5MXww&ixlib=rb-4.1.0&q=85",
+          "description": "Creator recording video for Hero section mockup",
+          "category": "Hero / UGC Example"
+        }
+      ],
+      "app_product_mockup": [
+        {
+          "url": "https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODl8MHwxfHNlYXJjaHwyfHxza2luY2FyZSUyMGJvdHRsZSUyMG1pbmltYWwlMjBwcm9kdWN0fGVufDB8fHx8MTc4NjgyMzE5MXww&ixlib=rb-4.1.0&q=85",
+          "description": "Minimal skincare bottle for the 'Product' upload step",
+          "category": "App Mockup"
+        }
+      ],
+      "creators_grid": [
+        {
+          "url": "https://images.unsplash.com/photo-1758598306845-8630d064a244?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwyfHxwZXJzb24lMjBzcGVha2luZyUyMHRvJTIwY2FtZXJhJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzg2ODIzMTkxfDA&ixlib=rb-4.1.0&q=85",
+          "description": "Person speaking to camera",
+          "category": "Features / AI Persona Settings"
+        },
+        {
+          "url": "https://images.unsplash.com/photo-1613186941372-f19da23e373b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwxfHxwZXJzb24lMjBzcGVha2luZyUyMHRvJTIwY2FtZXJhJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzg2ODIzMTkxfDA&ixlib=rb-4.1.0&q=85",
+          "description": "Creator pointing at camera",
+          "category": "Features / AI Persona Settings"
+        }
+      ]
+    }
+  },
+  "libraries": {
+    "icons": "lucide-react",
+    "animations": "framer-motion",
+    "toast": "sonner"
+  },
+  "accessibility": {
+    "contrast": "Ensure text meets WCAG AA standards over backgrounds.",
+    "testing": "CRITICAL: All interactive elements (buttons, inputs, selectable cards, copy buttons) MUST include a data-testid attribute in kebab-case describing their role (e.g., data-testid='upload-product-button')."
+  },
+  "instructions_to_main_agent": [
+    "1. Setup fonts (Outfit, Manrope, JetBrains Mono) in index.html.",
+    "2. Modify tailwind.config.js and index.css for the neutral + 1 accent color scheme.",
+    "3. Implement the Landing Page with the provided Unsplash images and bento grids.",
+    "4. Build the multi-step app in a dedicated route (e.g., /create) utilizing state for steps.",
+    "5. Do NOT use emojis for icons. Use lucide-react.",
+    "6. Make the result page prompt copyable and use Sonner for the success toast."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Do not make generic centered layouts. Use left-aligned, robust grid structures.",
+    "Use 2-3x more spacing than typical defaults.",
+    "Avoid the 'AI slop' look (no emojis, no generic dashboards, no heavy multi-color gradients).",
+    "Create depth through layered design elements with z-index hierarchy, but keep styling flat with crisp borders.",
+    "Every interaction needs micro-animations (hover states, transitions).",
+    "Never use placehold.it or similar placeholder image services. Use only provided URLs."
+  ]
+}
