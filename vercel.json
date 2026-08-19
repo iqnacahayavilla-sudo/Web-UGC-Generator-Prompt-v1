@@ -37,5 +37,16 @@
       "src": "/(.*)",
       "dest": "/frontend/build/index.html"
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
+

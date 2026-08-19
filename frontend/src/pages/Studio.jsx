@@ -17,6 +17,7 @@ import { Navbar } from "@/components/Navbar";
 import { Logo } from "@/components/Logo";
 import { OptionGroup } from "@/components/studio/OptionGroup";
 import { StepProgress } from "@/components/studio/StepProgress";
+import { useAuth } from "@/context/AuthContext";
 import { useCredits } from "@/context/CreditContext";
 import { analyzeImage, generatePrompt, getUserProjects } from "@/lib/api";
 import { supabase } from "@/lib/supabaseClient";
@@ -74,54 +75,54 @@ function sceneToText(s) {
   return lines.join("\n");
 }
 
-function downloadTxt(result, summary) {
-  if (!result) return;
-  const productName = summary?.product || result.summary?.product || "Produk UGC";
-  const now = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
+function downloadTxt(resultData, summaryData) {
+  const productName = summaryData?.product || resultData?.summary?.product || "Produk";
+  const dateStr = new Date().toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 
-  let content = `================================================================================\n`;
-  content += `SINERGI VISUAL — PROMPT VIDEO UGC HASIL GENERATOR\n`;
-  content += `Portal Member Area Sinergi Visual (Google Flow, Sora, Runway Gen-3)\n`;
-  content += `================================================================================\n\n`;
-  content += `Nama Produk    : ${productName}\n`;
-  content += `Tanggal Dibuat : ${now} WIB\n`;
-  content += `Durasi Video   : ${summary?.duration || result.summary?.duration || "15 Detik"}\n`;
-  content += `Rasio Layar    : ${summary?.aspect_ratio || result.summary?.aspect_ratio || "9:16 Vertikal"}\n`;
-  content += `Gaya UGC       : ${summary?.ugc_style || result.summary?.ugc_style || "Review Produk"}\n`;
-  content += `Persona Kreator: ${summary?.creator || result.summary?.creator || "Perempuan 20-an"}\n`;
-  content += `Bahasa Naskah  : ${summary?.language || result.summary?.language || "Bahasa Indonesia"}\n\n`;
+  let content = `=======================================================\n`;
+  content += `   SINERGI VISUAL — MASTER UGC VIDEO PROMPT\n`;
+  content += `=======================================================\n\n`;
+  content += `INFORMASI PROYEK:\n`;
+  content += `• Nama Produk   : ${productName}\n`;
+  content += `• Tanggal Buat  : ${dateStr}\n`;
+  content += `• Format Video  : ${summaryData?.duration || "15 Detik"} | ${summaryData?.aspect_ratio || "9:16 Vertikal"}\n`;
+  content += `• Gaya UGC      : ${summaryData?.ugc_style || "Review Produk"}\n`;
+  content += `• Persona       : ${summaryData?.creator || "Kreator"}\n`;
+  content += `• Bahasa        : ${summaryData?.language || "Bahasa Indonesia"}\n\n`;
+  content += `-------------------------------------------------------\n`;
+  content += `1. GOOGLE FLOW / SORA MASTER PROMPT (LENGKAP)\n`;
+  content += `-------------------------------------------------------\n\n`;
+  content += `${resultData?.master_prompt || ""}\n\n`;
 
-  content += `================================================================================\n`;
-  content += `1. GOOGLE FLOW MASTER PROMPT (LENGKAP)\n`;
-  content += `================================================================================\n\n`;
-  content += `${result.master_prompt || ""}\n\n`;
+  if (Array.isArray(resultData?.scenes) && resultData?.scenes?.length > 0) {
+    content += `-------------------------------------------------------\n`;
+    content += `2. RINCIAN ADENGAN TERPISAH (SCENE BREAKDOWN 1-${resultData?.scenes?.length})\n`;
+    content += `-------------------------------------------------------\n\n`;
 
-  if (result.character_anchor) {
-    content += `================================================================================\n`;
-    content += `2. CHARACTER & PRODUCT CONTINUITY ANCHOR\n`;
-    content += `================================================================================\n\n`;
-    content += `${result.character_anchor}\n\n`;
-  }
-
-  if (result.scenes && result.scenes.length > 0) {
-    content += `================================================================================\n`;
-    content += `3. RINCIAN ADEGAN & NASKAH DIALOG (SCENE 1 - ${result.scenes.length})\n`;
-    content += `================================================================================\n\n`;
-    result.scenes.forEach((s) => {
-      content += `--------------------------------------------------------------------------------\n`;
-      content += sceneToText(s) + `\n\n`;
+    resultData?.scenes?.forEach((s, idx) => {
+      content += `[SCENE ${s?.number ?? idx + 1}: ${s?.name || `Adegan ${idx + 1}`}] (${s?.time || ""})\n`;
+      if (s?.visual) content += `• Visual & Aksi  : ${s?.visual}\n`;
+      if (s?.audio || s?.dialogue) content += `• Naskah & Suara : ${s?.dialogue || s?.audio}\n`;
+      if (s?.camera) content += `• Kamera         : ${s?.camera}\n`;
+      if (s?.lighting) content += `• Lighting       : ${s?.lighting}\n`;
+      if (s?.transition) content += `• Transisi       : ${s?.transition}\n`;
+      content += `\n`;
     });
   }
 
-  content += `================================================================================\n`;
-  content += `© Sinergi Visual. Generated via Sinergi Visual UGC Video Prompt Studio.\n`;
-  content += `================================================================================\n`;
+  content += `=======================================================\n`;
+  content += `Dibuat secara otomatis oleh Sinergi Visual AI Studio.\n`;
+  content += `=======================================================\n`;
 
   const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  const filenameClean = productName.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
   link.href = url;
+  const filenameClean = (productName || "Produk").replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
   link.download = `UGC_Prompt_${filenameClean}_${Date.now()}.txt`;
   document.body.appendChild(link);
   link.click();
@@ -130,142 +131,162 @@ function downloadTxt(result, summary) {
   toast.success("File TXT prompt berhasil diunduh!");
 }
 
-function downloadPdf(result, summary) {
-  if (!result) return;
-  const productName = summary?.product || result.summary?.product || "Produk UGC";
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 40;
-  const maxLineWidth = pageWidth - margin * 2;
-  let y = 45;
+async function downloadPdf(result, summary) {
+  try {
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "pt",
+      format: "a4",
+    });
 
-  // Header Banner
-  doc.setFillColor(15, 23, 42); // Dark slate
-  doc.rect(0, 0, pageWidth, 55, "F");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 40;
+    const maxLineWidth = pageWidth - margin * 2;
+    let y = 50;
 
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(15);
-  doc.setFont("helvetica", "bold");
-  doc.text("SINERGI VISUAL — UGC VIDEO PROMPT", margin, 34);
+    const productName = summary?.product || result?.summary?.product || "Produk";
 
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.text("Google Flow & Sora Ready", pageWidth - margin - 130, 34);
+    // Header Banner
+    doc.setFillColor(30, 41, 59); // Slate-800
+    doc.roundedRect(margin, y, maxLineWidth, 65, 8, 8, "F");
 
-  y = 75;
-  doc.setTextColor(30, 41, 59);
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("SINERGI VISUAL — MASTER UGC PROMPT", margin + 18, y + 28);
 
-  // Metadata Box
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(margin, y, maxLineWidth, 65, 6, 6, "FD");
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(148, 163, 184);
+    doc.text("Generated via Sinergi Visual AI Studio • Format Google Flow & Sora Ready", margin + 18, y + 46);
 
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.text(`Produk: ${productName}`, margin + 12, y + 18);
-  doc.setFont("helvetica", "normal");
-  doc.text(`Gaya: ${summary?.ugc_style || result.summary?.ugc_style || "UGC Style"}`, margin + 12, y + 34);
-  doc.text(`Durasi: ${summary?.duration || result.summary?.duration || "15s"} | Rasio: ${summary?.aspect_ratio || result.summary?.aspect_ratio || "9:16"}`, margin + 12, y + 50);
+    y += 85;
 
-  doc.text(`Kreator: ${summary?.creator || result.summary?.creator || "Default"}`, margin + 260, y + 18);
-  doc.text(`Bahasa: ${summary?.language || result.summary?.language || "ID"}`, margin + 260, y + 34);
-  doc.text(`Tanggal: ${new Date().toLocaleDateString("id-ID")}`, margin + 260, y + 50);
+    // Metadata Box
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(margin, y, maxLineWidth, 68, 6, 6, "F");
 
-  y += 85;
+    doc.setFontSize(9);
+    doc.setTextColor(51, 65, 85);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Nama Produk: ${productName}`, margin + 16, y + 18);
 
-  // Master Prompt Header
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(79, 70, 229); // Primary Indigo
-  doc.text("1. GOOGLE FLOW MASTER PROMPT", margin, y);
-  y += 14;
+    doc.setFont("helvetica", "normal");
+    doc.text(`Format: ${summary?.duration || result?.summary?.duration || "15s"} | ${summary?.aspect_ratio || result?.summary?.aspect_ratio || "9:16"}`, margin + 16, y + 34);
+    doc.text(`Gaya UGC: ${summary?.ugc_style || result?.summary?.ugc_style || "Review Produk"}`, margin + 16, y + 50);
 
-  doc.setFontSize(8.5);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(51, 65, 85);
+    doc.text(`Kreator: ${summary?.creator || result?.summary?.creator || "Default"}`, margin + 260, y + 18);
+    doc.text(`Bahasa: ${summary?.language || result?.summary?.language || "ID"}`, margin + 260, y + 34);
+    doc.text(`Tanggal: ${new Date().toLocaleDateString("id-ID")}`, margin + 260, y + 50);
 
-  const masterLines = doc.splitTextToSize(result.master_prompt || "", maxLineWidth);
-  for (let line of masterLines) {
-    if (y > pageHeight - 50) {
-      doc.addPage();
-      y = 45;
-    }
-    doc.text(line, margin, y);
-    y += 11.5;
-  }
+    y += 85;
 
-  y += 15;
-
-  // Scenes Breakdown
-  if (result.scenes && result.scenes.length > 0) {
-    if (y > pageHeight - 80) {
-      doc.addPage();
-      y = 45;
-    }
-
+    // Master Prompt Header
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(79, 70, 229);
-    doc.text("2. RINCIAN ADEGAN & NASKAH DIALOG", margin, y);
-    y += 18;
+    doc.setTextColor(79, 70, 229); // Primary Indigo
+    doc.text("1. GOOGLE FLOW MASTER PROMPT", margin, y);
+    y += 14;
 
-    result.scenes.forEach((s) => {
-      if (y > pageHeight - 85) {
+    doc.setFontSize(8.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(51, 65, 85);
+
+    const masterLines = doc.splitTextToSize(result?.master_prompt || "", maxLineWidth);
+    for (let line of masterLines) {
+      if (y > pageHeight - 50) {
+        doc.addPage();
+        y = 45;
+      }
+      doc.text(line, margin, y);
+      y += 11.5;
+    }
+
+    y += 15;
+
+    // Scenes Breakdown
+    if (Array.isArray(result?.scenes) && result?.scenes?.length > 0) {
+      if (y > pageHeight - 80) {
         doc.addPage();
         y = 45;
       }
 
-      doc.setFillColor(241, 245, 249);
-      doc.rect(margin, y, maxLineWidth, 18, "F");
-      doc.setFontSize(9);
+      doc.setFontSize(11);
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(15, 23, 42);
-      doc.text(`Adegan ${s.number}: ${s.name} (${s.time})`, margin + 8, y + 12);
-      y += 24;
+      doc.setTextColor(79, 70, 229);
+      doc.text("2. RINCIAN ADEGAN & NASKAH DIALOG", margin, y);
+      y += 18;
 
-      doc.setFontSize(8.5);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(51, 65, 85);
-
-      if (s.dialogue) {
-        doc.setFont("helvetica", "bolditalic");
-        doc.text(`Dialog: "${s.dialogue}"`, margin + 8, y);
-        doc.setFont("helvetica", "normal");
-        y += 14;
-      }
-
-      if (s.visual) {
-        const visualLines = doc.splitTextToSize(`Visual: ${s.visual}`, maxLineWidth - 16);
-        for (let l of visualLines) {
-          if (y > pageHeight - 40) { doc.addPage(); y = 45; }
-          doc.text(l, margin + 8, y);
-          y += 11;
+      result?.scenes?.forEach((s, idx) => {
+        if (y > pageHeight - 85) {
+          doc.addPage();
+          y = 45;
         }
-      }
 
-      if (s.camera) {
-        doc.text(`Kamera: ${s.camera}`, margin + 8, y);
-        y += 12;
-      }
+        doc.setFillColor(241, 245, 249);
+        doc.rect(margin, y, maxLineWidth, 18, "F");
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(15, 23, 42);
+        doc.text(`Adegan ${s?.number ?? idx + 1}: ${s?.name || `Adegan ${idx + 1}`} (${s?.time || ""})`, margin + 8, y + 12);
+        y += 24;
 
-      y += 6;
-    });
+        doc.setFontSize(8.5);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(51, 65, 85);
+
+        if (s?.dialogue) {
+          doc.setFont("helvetica", "bolditalic");
+          doc.text(`Dialog: "${s?.dialogue}"`, margin + 8, y);
+          doc.setFont("helvetica", "normal");
+          y += 14;
+        }
+
+        if (s?.visual) {
+          const visualLines = doc.splitTextToSize(`Visual: ${s?.visual}`, maxLineWidth - 16);
+          for (let l of visualLines) {
+            if (y > pageHeight - 40) { doc.addPage(); y = 45; }
+            doc.text(l, margin + 8, y);
+            y += 11;
+          }
+        }
+
+        if (s?.camera) {
+          doc.text(`Kamera: ${s?.camera}`, margin + 8, y);
+          y += 12;
+        }
+
+        y += 6;
+      });
+    }
+
+    const filenameClean = (productName || "Produk").replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
+    doc.save(`UGC_Prompt_${filenameClean}_${Date.now()}.pdf`);
+    toast.success("File PDF prompt berhasil diunduh!");
+  } catch (err) {
+    console.error("Gagal membuat PDF:", err);
+    toast.error("Gagal mengunduh PDF. Silakan gunakan tombol Unduh TXT.");
   }
-
-  const filenameClean = productName.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
-  doc.save(`UGC_Prompt_${filenameClean}_${Date.now()}.pdf`);
-  toast.success("File PDF prompt berhasil diunduh!");
 }
 
 const creatorKey = (c) =>
-  [c.gender, c.age, c.personality, c.speaking_style, c.location].join("|");
+  [c?.gender, c?.age, c?.personality, c?.speaking_style, c?.location].join("|");
 
 export default function Studio() {
   const navigate = useNavigate();
   const fileRef = useRef(null);
-  const { totalCredits, openPricingModal, refreshCredits } = useCredits();
-  const { user } = useAuth();
+
+  // Safe context reading for mobile resilience & optional chaining
+  const authCtx = useAuth() || {};
+  const { user = null, profile = null, isLoading: authLoading = false } = authCtx;
+
+  const creditCtx = useCredits() || {};
+  const currentCredits = typeof creditCtx?.totalCredits === "number" ? creditCtx.totalCredits : (profile?.credits ?? 100);
+  const totalCredits = currentCredits;
+  const openPricingModal = creditCtx?.openPricingModal || (() => {});
+  const refreshCredits = creditCtx?.refreshCredits || (async () => {});
 
   const [step, setStep] = useState(0);
   const [maxReached, setMaxReached] = useState(0);
@@ -307,7 +328,7 @@ export default function Studio() {
     if (!user?.id) return;
     setLoadingHistory(true);
     try {
-      const data = await fetchMemberHistoryProjects(user.id);
+      const data = await fetchMemberHistoryProjects(user?.id);
       if (Array.isArray(data)) {
         setHistoryList(data);
       }
@@ -316,13 +337,38 @@ export default function Studio() {
     } finally {
       setLoadingHistory(false);
     }
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (user?.id) {
       fetchMemberHistory();
     }
-  }, [user, fetchMemberHistory]);
+  }, [user?.id, fetchMemberHistory]);
+
+  // Loading state awal saat verifikasi auth
+  if (authLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-slate-900 text-white">
+        <p className="animate-pulse">Memuat Studio Generator...</p>
+      </div>
+    );
+  }
+
+  // Jika tidak ada user dan loading selesai, arahkan ke login
+  if (!user) {
+    return (
+      <div className="flex flex-col justify-center items-center min-h-screen bg-slate-900 text-white p-4 text-center">
+        <p className="font-semibold text-lg">Sesi berakhir. Silakan login kembali.</p>
+        <button
+          type="button"
+          onClick={() => { window.location.href = "/login"; }}
+          className="mt-4 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg hover:bg-indigo-700"
+        >
+          Masuk ke Akun
+        </button>
+      </div>
+    );
+  }
 
   const handleFile = async (file) => {
     if (!file) return;
