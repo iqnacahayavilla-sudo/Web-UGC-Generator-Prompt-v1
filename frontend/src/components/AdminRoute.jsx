@@ -40,7 +40,7 @@ export const AdminRoute = ({ children }) => {
           </div>
           <h1 className="font-display text-2xl font-bold text-foreground">Akses Ditolak</h1>
           <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-            Halaman ini khusus diperuntukkan bagi akun Administrator <strong>(sinergivisual.id@gmail.com)</strong>.
+            Halaman ini khusus diperuntukkan bagi akun Administrator <strong>(iqna.cahayavilla@gmail.com)</strong>.
           </p>
           <div className="mt-4 rounded-xl border border-border/80 bg-background/80 p-3 text-xs text-muted-foreground">
             Akun Anda: <span className="font-mono font-bold text-foreground">{user?.email}</span>

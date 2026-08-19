@@ -66,7 +66,7 @@ export default function AdminPage() {
   const fetchMembers = React.useCallback(async () => {
     setLoadingMembers(true);
     try {
-      const res = await axios.get(`/api/admin/users?admin_email=${encodeURIComponent(user?.email || "sinergivisual.id@gmail.com")}`);
+      const res = await axios.get(`/api/admin/users?admin_email=${encodeURIComponent(user?.email || "iqna.cahayavilla@gmail.com")}`);
       if (res.data?.success) {
         setMembers(res.data.users || []);
       }
@@ -97,7 +97,7 @@ export default function AdminPage() {
         full_name: formData.fullName.trim(),
         initial_credits: Number(formData.initialCredits) || 100,
         plan_type: formData.planType,
-        admin_email: user?.email || "sinergivisual.id@gmail.com",
+        admin_email: user?.email || "iqna.cahayavilla@gmail.com",
       });
 
       if (res.data?.success) {
@@ -147,7 +147,7 @@ export default function AdminPage() {
         user_id: memberId,
         amount: Number(creditAmount) || 50,
         mode: "add",
-        admin_email: user?.email || "sinergivisual.id@gmail.com",
+        admin_email: user?.email || "iqna.cahayavilla@gmail.com",
       });
       if (res.data?.success) {
         toast.success(`Berhasil menambahkan ${creditAmount} kredit!`);

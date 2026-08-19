@@ -476,7 +476,7 @@ async def get_user_history(user_id: str = Query("guest-user"), limit: int = Quer
 
 
 # ---------- Admin Panel & User Management (Invite-Only) ----------
-ADMIN_EMAILS = {"sinergivisual.id@gmail.com"}
+ADMIN_EMAILS = {"iqna.cahayavilla@gmail.com", "sinergivisual.id@gmail.com"}
 
 class AdminCreateUserRequest(BaseModel):
     email: str
@@ -496,7 +496,7 @@ class AdminAdjustCreditsRequest(BaseModel):
 async def admin_create_user(req: AdminCreateUserRequest):
     """Membuat akun member baru oleh Admin (Invite-Only)."""
     if req.admin_email and req.admin_email.lower() not in ADMIN_EMAILS:
-        raise HTTPException(status_code=403, detail="Hanya akun Admin (sinergivisual.id@gmail.com) yang diizinkan.")
+        raise HTTPException(status_code=403, detail="Hanya akun Admin (iqna.cahayavilla@gmail.com) yang diizinkan.")
 
     try:
         res = await supabase_service.create_member_user(
@@ -515,7 +515,7 @@ async def admin_create_user(req: AdminCreateUserRequest):
 async def admin_list_users(admin_email: Optional[str] = Query(None), limit: int = Query(100)):
     """Mengambil daftar seluruh member terdaftar untuk Admin Panel."""
     if admin_email and admin_email.lower() not in ADMIN_EMAILS:
-        raise HTTPException(status_code=403, detail="Hanya akun Admin (sinergivisual.id@gmail.com) yang diizinkan.")
+        raise HTTPException(status_code=403, detail="Hanya akun Admin (iqna.cahayavilla@gmail.com) yang diizinkan.")
     
     try:
         members = await supabase_service.list_members(limit=limit)
@@ -528,7 +528,7 @@ async def admin_list_users(admin_email: Optional[str] = Query(None), limit: int 
 async def admin_adjust_credits(req: AdminAdjustCreditsRequest):
     """Menambah atau mengatur saldo kredit member oleh Admin."""
     if req.admin_email and req.admin_email.lower() not in ADMIN_EMAILS:
-        raise HTTPException(status_code=403, detail="Hanya akun Admin (sinergivisual.id@gmail.com) yang diizinkan.")
+        raise HTTPException(status_code=403, detail="Hanya akun Admin (iqna.cahayavilla@gmail.com) yang diizinkan.")
 
     try:
         res = await supabase_service.adjust_member_credits(

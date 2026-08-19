@@ -260,8 +260,10 @@ export const AuthProvider = ({ children }) => {
     toast.success("Berhasil logout dari akun.");
   };
 
+  const ADMIN_EMAILS = ["iqna.cahayavilla@gmail.com", "sinergivisual.id@gmail.com"];
+
   const isAdmin = Boolean(
-    user && (user.email?.toLowerCase() === "sinergivisual.id@gmail.com" || user.user_metadata?.is_admin === true)
+    user && (ADMIN_EMAILS.includes(user.email?.toLowerCase()) || user.user_metadata?.is_admin === true)
   );
 
   return (
