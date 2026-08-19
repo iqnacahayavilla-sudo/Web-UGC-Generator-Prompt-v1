@@ -15,34 +15,40 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/index.py"
+      "src": "^/api/(.*)$",
+      "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+      "dest": "api/index.py"
     },
     {
-      "src": "/static/(.*)",
+      "src": "^/api$",
+      "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+      "dest": "api/index.py"
+    },
+    {
+      "src": "^/static/(.*)$",
       "headers": {
         "cache-control": "s-maxage=31536000,immutable"
       },
       "dest": "/frontend/build/static/$1"
     },
     {
-      "src": "/favicon.svg",
+      "src": "^/favicon.svg$",
       "dest": "/frontend/build/favicon.svg"
     },
     {
-      "src": "/favicon1.svg",
+      "src": "^/favicon1.svg$",
       "dest": "/frontend/build/favicon1.svg"
     },
     {
-      "src": "/manifest.json",
+      "src": "^/manifest.json$",
       "dest": "/frontend/build/manifest.json"
     },
     {
-      "src": "/logo(.*)",
+      "src": "^/logo(.*)$",
       "dest": "/frontend/build/logo$1"
     },
     {
-      "src": "/(.*)",
+      "src": "^/((?!api).*)$",
       "dest": "/frontend/build/index.html"
     }
   ]
