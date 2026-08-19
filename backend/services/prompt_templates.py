@@ -106,16 +106,18 @@ def build_generation_messages(analysis: dict, video: dict, creator: dict,
     aspect = video.get("aspect_ratio", "9:16")
     is_premium = "premium" in style.lower() or creator.get("personality") == "Premium" or creator.get("speaking_style") == "Luxury"
 
+    prod_name = analysis.get("product_name") or "Produk Unggulan"
+    prod_type = analysis.get("product_type") or "Produk"
+    prod_cat = analysis.get("category") or "General"
+    prod_brand = analysis.get("brand") or ""
+
     system = (
-        "You are an elite UGC (user-generated content) video director, casting director and "
-        "affiliate copywriter. You turn a product and a few creative choices into ONE cohesive, "
-        "cinematic-yet-authentic prompt for AI video generators like Google Flow. Your #1 priority "
-        "is CONSISTENCY: the SAME creator (identical face, hair, skin, body, age, outfit, accessories, "
-        "voice and personality) and the SAME product must appear in EVERY scene. You never cast a new "
-        "person or redesign the product between scenes. You write authentic phone-shot UGC (not a "
-        "polished commercial) unless a premium style is requested. You never invent unverified claims "
-        "(no fake medical results, prices, discounts, testimonials, awards, stats or before/after). "
-        "You always respond with valid JSON only."
+        "You are an elite UGC (user-generated content) video director, casting director, and viral affiliate copywriter. "
+        "You turn exact product details and creative user choices into ONE cohesive, cinematic-yet-authentic "
+        "prompt and multi-scene script for AI video generators (Google Flow / Sora / Runway). "
+        f"Your highest priority is 100% FAITHFULNESS to the specific product '{prod_name}' ({prod_type}, {prod_cat}). "
+        "Every scene, spoken dialogue, and visual prompt MUST explicitly reference and showcase this exact product, its packaging, and its actual benefits. "
+        "The SAME creator and the SAME product must appear consistently in EVERY scene. Respond with valid JSON only."
     )
 
     # Character handling block.
@@ -159,58 +161,62 @@ def build_generation_messages(analysis: dict, video: dict, creator: dict,
         if natural_language else ""
     )
 
-    user = f"""Create ONE complete, consistent UGC video prompt for an AI video generator (Google Flow).
+    user = f"""Create ONE complete, consistent UGC video prompt for an AI video generator (Google Flow & Sora).
 
-## PRODUCT (from reference image analysis — this is the visual source of truth; preserve exactly)
+## TARGET PRODUCT (From Step 1 visual analysis & user refinement — preserve this EXACT product in all scenes):
+- Product Name: {prod_name}
+- Brand: {prod_brand if prod_brand else 'Authentic Brand from photo'}
+- Category: {prod_cat}
+- Product Type: {prod_type}
+- Complete Product Specs:
 {json.dumps(analysis, ensure_ascii=False, indent=2)}
 
-## VIDEO SETTINGS
+## VIDEO SETTINGS (From Step 2):
 - Aspect ratio: {aspect}
 - Duration: {duration}
 - Scene structure: {DURATION_STRUCTURE.get(duration, DURATION_STRUCTURE['10 seconds'])}
-- UGC style: {style} \u2014 {STYLE_GUIDES.get(style, "")}
-- Hook style: {hook} \u2014 {HOOK_GUIDES.get(hook, "")}
-- Selling style: {sell} \u2014 {SELL_GUIDES.get(sell, "")}
+- UGC style: {style} — {STYLE_GUIDES.get(style, "")}
+- Hook style: {hook} — {HOOK_GUIDES.get(hook, "")}
+- Selling style: {sell} — {SELL_GUIDES.get(sell, "")}
 
-## CREATOR SETTINGS
+## CREATOR SETTINGS (From Step 3):
 - Gender: {creator.get('gender', 'Any')}
 - Age: {creator.get('age', 'AI Chooses')}
 - Personality: {creator.get('personality', 'Relatable')}
 - Speaking style: {creator.get('speaking_style', 'Natural')}
-- Location: {creator.get('location', 'Product Appropriate')}
+- Location / Environment: {creator.get('location', 'Product Appropriate')}
 
 {character_block}
 
-## LANGUAGE
+## LANGUAGE & DIALOGUE (From Step 4):
 {LANGUAGE_GUIDES.get(language, LANGUAGE_GUIDES['English'])}
 {natural_note}
 
 ## STYLE & REALISM
 {realism_note}
 
-## AFFILIATE STORY
-Follow an affiliate arc adapted to the duration: HOOK -> PROBLEM/DESIRE -> DISCOVERY -> PRODUCT -> DEMONSTRATION -> BENEFIT -> CTA. The creator shares a genuine recommendation. The CTA must match the selling style and feel natural (no aggressive sales language, no invented promos/prices).
+## AFFILIATE STORY ARC
+Follow an authentic affiliate arc adapted to {duration}: HOOK -> PROBLEM/DESIRE -> DISCOVERY OF {prod_name.upper()} -> DEMONSTRATION & TEXTURE/PACKAGING -> BENEFIT -> NATURAL CTA. The creator shares a genuine recommendation.
 
 ## HARD CONSISTENCY RULES (CRITICAL)
-1. CHARACTER: The SAME creator appears in EVERY scene — identical facial identity, hairstyle, hair color, skin tone, body proportions, apparent age, outfit, accessories, voice and personality. Never cast a new person, never change wardrobe/hair/face/age/skin/voice between scenes (accessories only if the concept truly requires it).
-2. PRODUCT: Every scene shows the EXACT same physical product from the reference image — same shape, proportions, color, packaging, label, logo, typography, cap/lid, material, texture, size and distinctive details. Never redesign, morph, duplicate or re-text the product.
-3. CONTINUITY: Each scene continues from the previous one (same creator, outfit, hair, location, product, time-of-day lighting and overall visual style) and states only what changes. Keep a consistent handheld smartphone camera language across scenes; camera changes only when motivated.
-4. Product interaction must be physically realistic (pick up, hold, show to camera, open, apply, place down). No floating/teleporting/duplicated/morphing products.
-5. Describe realistic facial expressions and gestures per scene (e.g. briefly raises eyebrows, glances at product, light nod, one-hand gesture, short pause before a benefit) — not "she talks to camera".
-6. Voice continuity: define the creator's voice once and repeat that it is the exact same voice in every scene.
+1. CHARACTER: The SAME creator appears in EVERY scene — identical facial identity, hairstyle, hair color, skin tone, body proportions, apparent age, outfit, accessories, voice and personality. Never cast a new person between scenes.
+2. PRODUCT: Every scene shows the EXACT same physical product '{prod_name}' — same shape, proportions, color, packaging, label, logo, and finish as described in the product specs.
+3. CONTINUITY: Each scene continues seamlessly from the previous one. Keep consistent handheld smartphone camera movement.
+4. Product interaction must be physically realistic (pick up, hold, show to camera, open, apply/drink/use, place down).
+5. Voice continuity: The creator speaks with the exact same voice in every scene.
 
 ## STANDALONE SCENE REQUIREMENT
-Each scene prompt must be usable INDEPENDENTLY in Google Flow. Therefore each scene's `character_continuity` MUST embed the full Character Anchor text plus: "The SAME creator described in the Character Continuity section — maintain identical facial identity, hairstyle, clothing, accessories, body proportions, voice and personality. Use the exact same creator voice as all previous scenes." Never refer to the creator only as "the woman"/"the man".
+Each scene prompt must be usable INDEPENDENTLY in Google Flow. Therefore each scene's `character_continuity` MUST embed the full Character Anchor text plus: "The SAME creator described in the Character Continuity section — maintain identical facial identity, hairstyle, clothing, accessories, body proportions, voice and personality."
 {f"## EXTRA USER DIRECTION: {modifier}" if modifier else ""}
 
 ## OUTPUT FORMAT — return ONLY this JSON object:
 {{
   "summary": {{
-    "product": "product name",
+    "product": "{prod_name}",
     "duration": "{duration}",
     "aspect_ratio": "{aspect}",
     "ugc_style": "{style}",
-    "creator": "short one-line creator description",
+    "creator": "{creator.get('gender', 'Creator')}, {creator.get('age', '20-an')}",
     "language": "{language}"
   }},
   "character_bible": {{
@@ -221,8 +227,9 @@ Each scene prompt must be usable INDEPENDENTLY in Google Flow. Therefore each sc
     "personality": "", "energy_level": ""
   }},
   "character_anchor": "one vivid paragraph describing the exact creator identity, reusable verbatim in every scene",
-  "product_lock": "one paragraph describing the exact product to preserve in every scene, based on the reference analysis",
-  "master_prompt": "The FULL Google Flow master prompt as ONE clean plain-text block, in this order: VIDEO OVERVIEW (format, duration, platform, realism), UGC STYLE, CHARACTER CONSISTENCY LOCK (the same-creator-in-every-scene paragraph), CHARACTER ANCHOR (the anchor paragraph), PRODUCT CONSISTENCY LOCK (the do-not-change product paragraph), LOCATION, GLOBAL CAMERA STYLE, GLOBAL LIGHTING, AUDIO STYLE, then SCENE 1..N (each labelled 'SCENE X — TITLE' with TIME, CHARACTER CONTINUITY, PRODUCT CONTINUITY, LOCATION CONTINUITY, VISUAL, ACTION, FACIAL EXPRESSION, GESTURE, CAMERA, LIGHTING, AUDIO, DIALOGUE, TRANSITION/CONTINUITY INTO NEXT SCENE, NEGATIVE CONSTRAINTS), then CTA, then GLOBAL NEGATIVE PROMPT. Use plain text with real line breaks (\\n). Do NOT wrap it in JSON or markdown fences. This is exactly what the user copies into Google Flow.",
+  "product_lock": "one paragraph describing '{prod_name}' with exact colors, packaging, and label details to preserve in every scene",
+  "master_prompt": "The FULL Google Flow master prompt as ONE clean plain-text block for {prod_name}, including Overview, Creator Lock, Product Lock, Location, Lighting, Scene-by-Scene breakdown, Dialogue, and Negative Prompts.",
+
   "scenes": [
     {{
       "number": 1,

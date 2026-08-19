@@ -1030,7 +1030,7 @@ Product Lock: ${prodName} kemasan asli sesuai foto produk.
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm rounded-2xl">
                               <Loader2 className="h-8 w-8 animate-spin text-primary" />
                               <span className="mt-3 text-base font-bold text-foreground">Menganalisis Foto Produk...</span>
-                              <span className="mt-1 text-xs text-muted-foreground">AI Gemini Vision sedang membaca detail produk.</span>
+                              <span className="mt-1 text-xs text-muted-foreground">OpenAI Vision (GPT-4o-mini) sedang mengekstrak detail produk secara akurat.</span>
                             </div>
                           )}
                         </div>
