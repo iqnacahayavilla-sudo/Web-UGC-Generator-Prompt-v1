@@ -32,39 +32,39 @@ export const Navbar = () => {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/80 bg-background/90 backdrop-blur-md transition-colors duration-200">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 py-3 sm:px-6 md:px-8">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Brand Logo */}
         <Logo linkTo="/" size="md" />
 
-        {/* Right Section: Badges & Actions */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        {/* Right Section: Navigation Links, Badges & Actions */}
+        <div className="flex items-center gap-3 sm:gap-4 lg:gap-5">
           {/* Desktop Navigation Links */}
           {pathname === "/" && (
-            <nav className="mr-2 hidden items-center gap-1 md:flex">
+            <nav className="mr-1 hidden items-center gap-1.5 lg:gap-2.5 md:flex">
               <a
                 href="#top"
-                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+                className="rounded-xl px-3 py-1.5 text-xs lg:text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground"
                 data-testid="nav-beranda"
               >
                 Dashboard
               </a>
               <a
                 href="#pembelajaran"
-                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+                className="rounded-xl px-3 py-1.5 text-xs lg:text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground"
                 data-testid="nav-pembelajaran"
               >
                 Area Pembelajaran
               </a>
               <a
                 href="#prompt-vault"
-                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+                className="rounded-xl px-3 py-1.5 text-xs lg:text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground"
                 data-testid="nav-prompt-vault"
               >
                 Library Prompt
               </a>
               <Link
                 to="/create"
-                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+                className="rounded-xl px-3 py-1.5 text-xs lg:text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground"
                 data-testid="nav-buka-studio"
               >
                 Buka Studio
@@ -73,16 +73,16 @@ export const Navbar = () => {
                 href={waSupportUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-lg px-3 py-2 text-sm font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors flex items-center gap-1.5"
+                className="rounded-xl px-3 py-1.5 text-xs lg:text-sm font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all flex items-center gap-1.5"
                 data-testid="nav-vip-support"
               >
-                <HelpCircle className="h-4 w-4" />
+                <HelpCircle className="h-3.5 w-3.5" />
                 <span>VIP Support</span>
               </a>
               {isAdmin && (
                 <Link
                   to="/admin"
-                  className="rounded-lg px-3 py-2 text-sm font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-colors flex items-center gap-1.5 ml-1"
+                  className="rounded-xl px-3 py-1.5 text-xs lg:text-sm font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all flex items-center gap-1.5 ml-0.5"
                   data-testid="nav-admin"
                 >
                   <Crown className="h-3.5 w-3.5 text-amber-500" />
@@ -93,7 +93,9 @@ export const Navbar = () => {
           )}
 
           {/* Compact Credit Badge (Always Visible for quick balance check) */}
-          <CreditBadge />
+          <div className="flex items-center">
+            <CreditBadge />
+          </div>
 
           {/* User Profile / Auth Button */}
           {isAuthenticated ? (
@@ -113,19 +115,19 @@ export const Navbar = () => {
           )}
 
           {/* Desktop Secondary Buttons */}
-          <div className="hidden items-center gap-2 md:flex">
+          <div className="hidden items-center gap-2.5 md:flex">
             <ThemeToggle />
 
             {pathname !== "/create" ? (
               <Link to="/create" data-testid="navbar-create-btn">
-                <Button className="h-10 gap-2 rounded-xl px-4 sm:px-5 font-semibold shadow-sm transition-all hover:shadow-md hover:scale-[1.02] active:scale-[0.98]">
-                  <Sparkles className="h-4 w-4" />
+                <Button className="h-9.5 lg:h-10 gap-2 rounded-xl px-4 lg:px-5 text-xs lg:text-sm font-bold shadow-sm transition-all hover:shadow-md hover:scale-[1.02] active:scale-[0.98]">
+                  <Sparkles className="h-3.5 w-3.5" />
                   <span>Buat Prompt</span>
                 </Button>
               </Link>
             ) : (
               <Link to="/" data-testid="navbar-home-btn">
-                <Button variant="outline" className="h-10 rounded-xl px-4 text-sm font-medium">
+                <Button variant="outline" className="h-9.5 lg:h-10 rounded-xl px-4 text-xs lg:text-sm font-semibold">
                   Dashboard
                 </Button>
               </Link>

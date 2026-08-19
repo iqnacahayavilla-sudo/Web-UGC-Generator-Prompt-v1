@@ -249,9 +249,9 @@ export default function Landing() {
         <div className="absolute inset-0 dot-grid opacity-70 pointer-events-none" />
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg h-64 sm:h-80 bg-primary/15 rounded-full blur-[110px] pointer-events-none" />
 
-        <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 md:px-8 sm:py-12">
+        <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 sm:py-14 md:py-16">
           {/* Header Greeting Banner */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/70 pb-6 mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/70 pb-7 mb-8 sm:mb-10">
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-0.5 text-xs font-extrabold text-primary">
@@ -288,9 +288,9 @@ export default function Landing() {
           </div>
 
           {/* 3 QUICK STATS CARD (WIDGET MEMBER VIP) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {/* Widget 1: Status Akun */}
-            <div className="rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-sm flex flex-col justify-between transition-all hover:border-emerald-500/40 hover:shadow-md">
+            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card p-6 sm:p-7 shadow-sm flex flex-col justify-between transition-all hover:border-emerald-500/40 hover:shadow-md">
               <div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Status Keanggotaan</span>
@@ -315,7 +315,7 @@ export default function Landing() {
             </div>
 
             {/* Widget 2: Kredit Token */}
-            <div className="rounded-2xl border-2 border-primary/40 bg-primary/5 p-5 sm:p-6 shadow-md flex flex-col justify-between relative">
+            <div className="rounded-2xl border-2 border-primary/40 bg-primary/5 p-6 sm:p-7 shadow-md flex flex-col justify-between relative">
               <div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-primary">Saldo Kredit Token</span>
@@ -357,7 +357,7 @@ export default function Landing() {
             </div>
 
             {/* Widget 3: Total Prompt Dibuat */}
-            <div className="rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-sm flex flex-col justify-between transition-all hover:border-primary/40 hover:shadow-md">
+            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card p-6 sm:p-7 shadow-sm flex flex-col justify-between transition-all hover:border-primary/40 hover:shadow-md">
               <div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Prompt Dibuat</span>
@@ -393,7 +393,7 @@ export default function Landing() {
       </section>
 
       {/* AREA PEMBELAJARAN (MATERI & VIDEO PANDUAN) */}
-      <section id="pembelajaran" className="mx-auto max-w-6xl px-4 py-14 sm:px-6 md:px-8 sm:py-20">
+      <section id="pembelajaran" className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 sm:py-20">
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
           <div className="max-w-2xl">
             <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
@@ -465,7 +465,7 @@ export default function Landing() {
 
       {/* SECTION: PROMPT VAULT (BONUS MASTER PROMPT NICHE TERLARIS) */}
       <section id="prompt-vault" className="border-y border-border/80 bg-secondary/15 py-14 sm:py-20">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 md:px-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
               <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
@@ -480,7 +480,7 @@ export default function Landing() {
             </div>
 
             {/* Niche Filter Buttons */}
-            <div className="flex flex-wrap gap-1.5 p-1 bg-background/80 rounded-2xl border border-border/80">
+            <div className="flex flex-wrap gap-1.5 p-1 bg-background/90 rounded-2xl border border-border/80 shadow-sm">
               {[
                 { id: "all", label: "Semua Niche" },
                 { id: "skincare", label: "Skincare" },
@@ -492,9 +492,9 @@ export default function Landing() {
                   key={tab.id}
                   type="button"
                   onClick={() => setSelectedNiche(tab.id)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                  className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
                     selectedNiche === tab.id
-                      ? "bg-primary text-primary-foreground shadow-sm"
+                      ? "bg-primary text-primary-foreground shadow-sm font-extrabold"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
@@ -505,57 +505,58 @@ export default function Landing() {
           </div>
 
           {/* Prompt Cards Grid */}
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {filteredVault.map((item) => {
               const isCopied = copiedPromptId === item.id;
               return (
                 <div
                   key={item.id}
-                  className="rounded-3xl border border-border/80 bg-card p-6 shadow-sm flex flex-col justify-between transition-all hover:border-primary/40 hover:shadow-lg"
+                  className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card p-5 sm:p-6 shadow-sm flex flex-col justify-between transition-all hover:border-primary/50 hover:shadow-md"
                 >
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="rounded-md bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                  <div className="space-y-3.5">
+                    {/* Badge row */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 text-[11px] font-extrabold text-amber-700 dark:text-amber-400">
                         {item.badge}
                       </span>
-                      <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground">
-                        <span className="rounded bg-secondary px-1.5 py-0.5">{item.duration}</span>
-                        <span className="rounded bg-secondary px-1.5 py-0.5">{item.ratio}</span>
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-600 dark:text-slate-400">
+                        <span className="rounded-md bg-secondary/80 px-2 py-0.5 font-semibold">{item.duration}</span>
+                        <span className="rounded-md bg-secondary/80 px-2 py-0.5 font-semibold">{item.ratio}</span>
                       </div>
                     </div>
 
                     <div>
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-primary">{item.niche}</span>
-                      <h3 className="mt-1 font-display text-lg font-bold text-foreground">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-primary">{item.niche}</span>
+                      <h3 className="mt-1 font-display text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-snug">
                         {item.title}
                       </h3>
                     </div>
 
-                    <div className="rounded-xl border border-border bg-secondary/40 p-3 text-xs">
-                      <span className="font-semibold text-foreground">🔥 Hook Pembuka:</span>{" "}
-                      <span className="text-muted-foreground italic">"{item.hook}"</span>
+                    <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/60 p-3 text-xs">
+                      <span className="font-bold text-slate-900 dark:text-slate-100">🔥 Hook Pembuka:</span>{" "}
+                      <span className="text-slate-600 dark:text-slate-300 italic">"{item.hook}"</span>
                     </div>
 
-                    <div className="relative overflow-hidden rounded-xl border border-border/80 bg-background/80 p-3.5 font-mono text-[11px] leading-relaxed text-muted-foreground max-h-36 overflow-y-auto">
+                    <div className="relative overflow-hidden rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 p-3 font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-300 max-h-32 overflow-y-auto select-all">
                       <pre className="whitespace-pre-wrap font-sans">{item.promptText}</pre>
                     </div>
                   </div>
 
-                  <div className="mt-6 pt-4 border-t border-border/60 flex items-center justify-between gap-3">
+                  <div className="mt-5 pt-4 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between gap-2.5">
                     <Button
                       onClick={() => handleCopyPrompt(item.id, item.promptText)}
-                      className={`flex-1 h-11 gap-2 rounded-xl text-xs font-bold transition-all ${
+                      className={`flex-1 h-10 sm:h-11 gap-1.5 sm:gap-2 rounded-xl text-xs font-bold transition-all ${
                         isCopied
                           ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                          : "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+                          : "bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
                       }`}
                     >
                       {isCopied ? <CheckCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                      <span>{isCopied ? "Tersalin ke Clipboard!" : "Salin Master Prompt (1-Click)"}</span>
+                      <span>{isCopied ? "Tersalin!" : "Salin Prompt (1-Click)"}</span>
                     </Button>
 
                     <Link to="/create">
-                      <Button variant="outline" className="h-11 rounded-xl text-xs font-semibold gap-1">
+                      <Button variant="outline" className="h-10 sm:h-11 rounded-xl px-3.5 text-xs font-semibold gap-1 hover:bg-secondary">
                         <span>Buat Serupa</span>
                         <ArrowRight className="h-3.5 w-3.5" />
                       </Button>
@@ -570,16 +571,16 @@ export default function Landing() {
 
       {/* CARA KERJA STUDIO */}
       <section id="cara-kerja" className="py-14 sm:py-20 border-b border-border/80">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 md:px-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
             <span className="text-xs font-bold uppercase tracking-wider text-primary">Alur Kerja Generator</span>
             <h2 className="mt-1 font-display text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight">4 Tahap Pembuatan Prompt Otomatis</h2>
             <p className="mt-2 text-xs sm:text-sm text-muted-foreground">Dari satu foto produk menjadi naskah dan prompt video siap pakai dalam hitungan detik.</p>
           </div>
 
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-5">
             {STEPS.map((s, i) => (
-              <div key={s.title} className="rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm transition-all hover:border-primary/40 hover:shadow-md hover:-translate-y-1">
+              <div key={s.title} className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card p-5 sm:p-6 shadow-sm transition-all hover:border-primary/40 hover:shadow-md hover:-translate-y-1">
                 <span className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <s.icon className="h-5 w-5 sm:h-6 sm:w-6" />
                 </span>
@@ -604,7 +605,7 @@ export default function Landing() {
 
       {/* GAYA UGC CHIPS */}
       <section className="py-14 sm:py-20 border-b border-border/80 bg-secondary/10">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 md:px-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
             <h2 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight">Koleksi Formula & Gaya Video UGC</h2>
             <p className="mt-2 text-xs sm:text-sm text-muted-foreground">Pilih formula video yang paling sesuai dengan tujuan konversi produk Anda.</p>
@@ -623,7 +624,7 @@ export default function Landing() {
       </section>
 
       {/* FAQ */}
-      <section className="mx-auto max-w-3xl px-4 py-14 sm:px-6 md:px-8 sm:py-20 border-t border-border/80">
+      <section className="mx-auto max-w-4xl px-4 py-14 sm:px-6 lg:px-8 sm:py-20 border-t border-border/80">
         <div className="text-center">
           <span className="text-xs font-bold uppercase tracking-wider text-primary">Tanya Jawab</span>
           <h2 className="mt-1 font-display text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight">Pertanyaan Umum Member</h2>
@@ -706,7 +707,7 @@ export default function Landing() {
 
       {/* FOOTER */}
       <footer className="border-t border-border/80 py-8 sm:py-10 bg-background">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 md:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
           <Logo clickable={false} size="sm" />
           <div className="flex items-center gap-4">
             <a
