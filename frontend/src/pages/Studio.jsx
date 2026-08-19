@@ -176,8 +176,8 @@ export default function Studio() {
 
   const runGenerate = async (action = null) => {
     // 1. Validasi saldo kredit sebelum generate
-    if (totalCredits < 1) {
-      toast.error("Saldo kredit token Anda telah habis (0). Silakan top up atau upgrade paket.");
+    if (totalCredits <= 0) {
+      toast.error("Kredit Anda habis, silakan top up");
       openPricingModal();
       return;
     }
@@ -226,12 +226,15 @@ export default function Studio() {
       const detail = e?.response?.data?.detail;
       const isCreditError =
         e?.response?.status === 403 ||
+        (typeof detail === "string" && detail.toLowerCase().includes("kredit")) ||
         (detail && typeof detail === "object" && (detail.code === "KREDIT_TIDAK_CUKUP" || detail.code === "KREDIT_HABIS"));
 
       if (isCreditError) {
         const errorMsg =
-          (detail && typeof detail === "object" && detail.message) ||
-          "Kredit tidak cukup. Minimal saldo yang dibutuhkan adalah 10 credits. Silakan lakukan top up atau upgrade paket.";
+          typeof detail === "string"
+            ? detail
+            : (detail && typeof detail === "object" && detail.message) ||
+              "Kredit Anda habis, silakan top up";
         toast.error(errorMsg);
         openPricingModal();
         if (!hasPrevious) setView("wizard");
@@ -903,9 +906,43 @@ export default function Studio() {
                       <Switch checked={naturalLang} onCheckedChange={setNaturalLang} data-testid="natural-language-switch" />
                     </div>
 
-                    <Button className="h-14 w-full gap-2.5 rounded-2xl text-base font-bold shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5" onClick={() => runGenerate()} data-testid="generate-btn">
+                    {totalCredits <= 0 && (
+                      <div className="flex items-center justify-between gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-xs font-semibold text-destructive">
+                        <div className="flex items-center gap-2.5">
+                          <Zap className="h-5 w-5 shrink-0" />
+                          <span>Kredit Anda habis, silakan top up untuk membuat prompt video UGC.</span>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={openPricingModal}
+                          className="shrink-0 h-8 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xs font-bold"
+                          data-testid="topup-now-btn"
+                        >
+                          Top Up
+                        </Button>
+                      </div>
+                    )}
+
+                    <Button
+                      disabled={totalCredits <= 0}
+                      className={`h-14 w-full gap-2.5 rounded-2xl text-base font-bold transition-all ${
+                        totalCredits <= 0
+                          ? "bg-secondary text-muted-foreground opacity-60 cursor-not-allowed border border-border"
+                          : "shadow-md hover:shadow-lg hover:-translate-y-0.5"
+                      }`}
+                      onClick={() => {
+                        if (totalCredits <= 0) {
+                          toast.error("Kredit Anda habis, silakan top up");
+                          openPricingModal();
+                          return;
+                        }
+                        runGenerate();
+                      }}
+                      data-testid="generate-btn"
+                    >
                       <Sparkles className="h-5 w-5" />
-                      <span>Buat Prompt Video UGC Sekarang</span>
+                      <span>{totalCredits <= 0 ? "Kredit Anda habis, silakan top up" : "Buat Prompt Video UGC Sekarang"}</span>
                     </Button>
                   </section>
                 )}
@@ -933,8 +970,25 @@ export default function Studio() {
                   <span>Langkah Berikutnya</span> <ArrowRight className="h-4 w-4" />
                 </Button>
               ) : (
-                <Button className="h-11 gap-1.5 rounded-xl px-6 font-semibold shadow-md hover:shadow-lg" onClick={() => runGenerate()} data-testid="generate-btn-footer">
-                  <Sparkles className="h-4 w-4" /> <span>Buat Prompt Video UGC Sekarang</span>
+                <Button
+                  disabled={totalCredits <= 0}
+                  className={`h-11 gap-1.5 rounded-xl px-6 font-semibold transition-all ${
+                    totalCredits <= 0
+                      ? "bg-secondary text-muted-foreground opacity-60 cursor-not-allowed border border-border"
+                      : "shadow-md hover:shadow-lg"
+                  }`}
+                  onClick={() => {
+                    if (totalCredits <= 0) {
+                      toast.error("Kredit Anda habis, silakan top up");
+                      openPricingModal();
+                      return;
+                    }
+                    runGenerate();
+                  }}
+                  data-testid="generate-btn-footer"
+                >
+                  <Sparkles className="h-4 w-4" />{" "}
+                  <span>{totalCredits <= 0 ? "Kredit Anda habis, silakan top up" : "Buat Prompt Video UGC Sekarang"}</span>
                 </Button>
               )}
             </div>

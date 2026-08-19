@@ -353,13 +353,15 @@ async def serve_file(path: str):
 @api_router.post("/projects/{project_id}/generate")
 async def generate_prompt(project_id: str, req: GenerateRequest):
     user_id = req.user_id or "guest-user"
-    credit_cost = GENERATE_CREDIT_COST  # Default 10 credits
+    credit_cost = 10  # 10 credits per prompt generation
 
-    # 1. Cek apakah credit user cukup sebelum generate; jika credit < 10, kembalikan error 'Kredit tidak cukup'.
+    # 1. Validasi tegas sebelum proses AI berjalan: if user_credits < 10: raise HTTPException(status_code=403, detail="Kredit tidak mencukupi untuk melakukan generate prompt.")
     try:
         is_enough, total_credits, user_info = await supabase_service.check_user_credits(user_id, required_credits=credit_cost)
-        if not is_enough:
-            # Catat log aktivitas gagal karena kredit tidak mencukupi
+        user_credits = total_credits
+
+        if user_credits < 10:
+            # Catat log aktivitas gagal karena kredit tidak mencukupi ke MongoDB
             await log_generation_activity(
                 user_id=user_id,
                 project_id=project_id,
@@ -367,16 +369,11 @@ async def generate_prompt(project_id: str, req: GenerateRequest):
                 product_name=req.product_analysis.get("product_name"),
                 duration=req.video_settings.duration,
                 credits_deducted=0,
-                error_message=f"Kredit tidak cukup. Dibutuhkan {credit_cost} credits, saldo tersedia: {total_credits}."
+                error_message="Kredit tidak mencukupi untuk melakukan generate prompt."
             )
             raise HTTPException(
                 status_code=403,
-                detail={
-                    "code": "KREDIT_TIDAK_CUKUP",
-                    "message": f"Kredit tidak cukup. Dibutuhkan minimal {credit_cost} credits untuk membuat prompt video UGC (Saldo Anda: {total_credits} credits).",
-                    "required_credits": credit_cost,
-                    "current_credits": total_credits
-                }
+                detail="Kredit tidak mencukupi untuk melakukan generate prompt."
             )
     except HTTPException:
         raise
