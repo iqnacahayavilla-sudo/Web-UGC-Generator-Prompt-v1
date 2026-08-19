@@ -1,3 +1,4 @@
+import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
@@ -6,23 +7,37 @@ import { CreditBadge } from "@/components/CreditBadge";
 import { UserMenu } from "@/components/UserMenu";
 import { useCredits } from "@/context/CreditContext";
 import { useAuth } from "@/context/AuthContext";
-import { Sparkles, Crown, LogIn } from "lucide-react";
+import {
+  Sparkles,
+  Crown,
+  LogIn,
+  Menu,
+  X,
+  Clapperboard,
+  HelpCircle,
+  ArrowRight,
+  Home,
+} from "lucide-react";
 
 export const Navbar = () => {
   const { pathname } = useLocation();
   const { openPricingModal } = useCredits();
   const { isAuthenticated, openAuthModal } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const closeMobileMenu = () => setMobileMenuOpen(false);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border/80 bg-background/85 backdrop-blur-md transition-colors duration-200">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-8">
+    <header className="sticky top-0 z-50 border-b border-border/80 bg-background/90 backdrop-blur-md transition-colors duration-200">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 py-3 sm:px-6 md:px-8">
         {/* Brand Logo */}
         <Logo linkTo="/" size="md" />
 
-        {/* Navigation Links & Actions */}
-        <nav className="flex items-center gap-2 sm:gap-3">
+        {/* Right Section: Badges & Actions */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Desktop Navigation Links */}
           {pathname === "/" && (
-            <div className="mr-2 hidden items-center gap-1 md:flex">
+            <nav className="mr-2 hidden items-center gap-1 md:flex">
               <a
                 href="#top"
                 className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
@@ -53,10 +68,10 @@ export const Navbar = () => {
                 <Crown className="h-3.5 w-3.5 text-amber-500" />
                 <span>Paket & Top Up</span>
               </button>
-            </div>
+            </nav>
           )}
 
-          {/* Credit Balance Indicator Badge */}
+          {/* Compact Credit Badge (Always Visible for quick balance check) */}
           <CreditBadge />
 
           {/* User Profile / Auth Button */}
@@ -75,26 +90,108 @@ export const Navbar = () => {
             </Button>
           )}
 
-          {/* Theme Toggle Button */}
-          <ThemeToggle />
+          {/* Desktop Secondary Buttons */}
+          <div className="hidden items-center gap-2 md:flex">
+            <ThemeToggle />
 
-          {/* Create Button */}
-          {pathname !== "/create" ? (
-            <Link to="/create" data-testid="navbar-create-btn">
-              <Button className="h-10 gap-2 rounded-xl px-4 sm:px-5 font-semibold shadow-sm transition-all hover:shadow-md hover:scale-[1.02] active:scale-[0.98]">
-                <Sparkles className="h-4 w-4" />
-                <span className="hidden sm:inline">Buat Prompt</span>
-              </Button>
-            </Link>
-          ) : (
-            <Link to="/" data-testid="navbar-home-btn">
-              <Button variant="outline" className="h-10 rounded-xl px-4 text-sm font-medium">
-                Beranda
-              </Button>
-            </Link>
-          )}
-        </nav>
+            {pathname !== "/create" ? (
+              <Link to="/create" data-testid="navbar-create-btn">
+                <Button className="h-10 gap-2 rounded-xl px-4 sm:px-5 font-semibold shadow-sm transition-all hover:shadow-md hover:scale-[1.02] active:scale-[0.98]">
+                  <Sparkles className="h-4 w-4" />
+                  <span>Buat Prompt</span>
+                </Button>
+              </Link>
+            ) : (
+              <Link to="/" data-testid="navbar-home-btn">
+                <Button variant="outline" className="h-10 rounded-xl px-4 text-sm font-medium">
+                  Beranda
+                </Button>
+              </Link>
+            )}
+          </div>
+
+          {/* Mobile Hamburger Toggle Button (md:hidden) */}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            aria-label="Buka Menu Navigasi Mobile"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/80 bg-secondary/40 text-foreground transition-colors hover:bg-secondary md:hidden"
+            data-testid="mobile-menu-toggle"
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
+
+      {/* Mobile Slide-down Menu Dropdown */}
+      {mobileMenuOpen && (
+        <div className="border-b border-border/80 bg-background/95 px-4 py-4 backdrop-blur-xl md:hidden animate-in slide-in-from-top-2 duration-200">
+          <div className="space-y-3">
+            {/* Primary Action in Mobile Drawer */}
+            {pathname !== "/create" ? (
+              <Link to="/create" onClick={closeMobileMenu}>
+                <Button className="h-12 w-full gap-2 rounded-xl text-sm font-bold shadow-md">
+                  <Sparkles className="h-4 w-4" />
+                  <span>Buat Prompt Video UGC Sekarang</span>
+                  <ArrowRight className="h-4 w-4 ml-auto" />
+                </Button>
+              </Link>
+            ) : (
+              <Link to="/" onClick={closeMobileMenu}>
+                <Button variant="outline" className="h-11 w-full gap-2 rounded-xl text-sm font-medium">
+                  <Home className="h-4 w-4" />
+                  <span>Kembali ke Beranda</span>
+                </Button>
+              </Link>
+            )}
+
+            {/* Navigation links in Mobile Drawer */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <a
+                href="#top"
+                onClick={closeMobileMenu}
+                className="flex items-center gap-2 rounded-xl border border-border/60 bg-secondary/30 p-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary"
+              >
+                <Home className="h-4 w-4 text-primary" />
+                <span>Beranda</span>
+              </a>
+              <a
+                href="#cara-kerja"
+                onClick={closeMobileMenu}
+                className="flex items-center gap-2 rounded-xl border border-border/60 bg-secondary/30 p-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary"
+              >
+                <Clapperboard className="h-4 w-4 text-primary" />
+                <span>Cara Kerja</span>
+              </a>
+              <a
+                href="#contoh"
+                onClick={closeMobileMenu}
+                className="flex items-center gap-2 rounded-xl border border-border/60 bg-secondary/30 p-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary"
+              >
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span>Contoh Prompt</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  closeMobileMenu();
+                  openPricingModal();
+                }}
+                className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-left text-xs font-semibold text-amber-600 dark:text-amber-400 transition-colors hover:bg-amber-500/20"
+              >
+                <Crown className="h-4 w-4 text-amber-500" />
+                <span>Paket & Top Up</span>
+              </button>
+            </div>
+
+            {/* Bottom Row: Theme Toggle on Mobile */}
+            <div className="flex items-center justify-between border-t border-border/60 pt-3 text-xs text-muted-foreground">
+              <span>Mode Tampilan</span>
+              <ThemeToggle />
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

@@ -558,7 +558,7 @@ export default function Studio() {
     return (
       <div className="min-h-screen bg-background text-foreground transition-colors duration-200">
         <Navbar />
-        <main className="mx-auto max-w-6xl px-4 py-8 sm:px-8">
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 md:px-8 sm:py-8">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary">
@@ -740,7 +740,7 @@ export default function Studio() {
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-200">
       <Navbar />
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-8">
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 md:px-8 sm:py-8">
         <div className="mb-6">
           <span className="text-xs font-bold uppercase tracking-wider text-primary">Generator Studio</span>
           <h1 className="mt-0.5 font-display text-2xl font-extrabold tracking-tight sm:text-3xl">
@@ -751,10 +751,10 @@ export default function Studio() {
           </p>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-[270px_1fr]">
+        <div className="grid gap-6 sm:gap-8 lg:grid-cols-[270px_1fr]">
           {/* Sidebar */}
           <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
-            <div className="rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm">
+            <div className="rounded-2xl border border-border/80 bg-card p-3 sm:p-3.5 shadow-sm">
               <StepProgress current={step} maxReached={maxReached} onStepClick={goStep} />
             </div>
 
@@ -776,7 +776,7 @@ export default function Studio() {
           </aside>
 
           {/* Wizard Content */}
-          <div className="min-h-[440px] rounded-2xl border border-border/80 bg-card p-6 sm:p-8 shadow-sm">
+          <div className="min-h-[440px] rounded-2xl border border-border/80 bg-card p-4 sm:p-6 md:p-8 shadow-sm">
             <AnimatePresence mode="wait">
               <motion.div
                 key={step}
