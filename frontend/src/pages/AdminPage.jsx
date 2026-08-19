@@ -25,7 +25,11 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
-import { adminCreateUser, adminGetUsers, adminAdjustCredits } from "@/lib/api";
+import {
+  createMemberByAdmin,
+  getMembersListByAdmin,
+  adjustMemberCreditsByAdmin,
+} from "@/lib/supabaseAdmin";
 
 export default function AdminPage() {
   const { user } = useAuth();
@@ -62,11 +66,11 @@ export default function AdminPage() {
     setFormData((prev) => ({ ...prev, password: pass }));
   };
 
-  // Fetch Member List
+  // Fetch Member List directly from Supabase
   const fetchMembers = React.useCallback(async () => {
     setLoadingMembers(true);
     try {
-      const data = await adminGetUsers(user?.email || "iqna.cahayavilla@gmail.com");
+      const data = await getMembersListByAdmin(100);
       if (data?.success) {
         setMembers(data.users || []);
       }
@@ -75,13 +79,13 @@ export default function AdminPage() {
     } finally {
       setLoadingMembers(false);
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     fetchMembers();
   }, [fetchMembers]);
 
-  // Handle Create Member via explicit POST
+  // Handle Create Member via direct Supabase Admin SDK
   const handleCreateMember = async (e) => {
     e.preventDefault();
     if (!formData.email || !formData.password || !formData.fullName) {
@@ -91,13 +95,12 @@ export default function AdminPage() {
 
     setIsSubmitting(true);
     try {
-      const data = await adminCreateUser({
+      const data = await createMemberByAdmin({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        full_name: formData.fullName.trim(),
-        initial_credits: Number(formData.initialCredits) || 100,
-        plan_type: formData.planType,
-        admin_email: user?.email || "iqna.cahayavilla@gmail.com",
+        fullName: formData.fullName.trim(),
+        initialCredits: Number(formData.initialCredits) || 100,
+        planType: formData.planType,
       });
 
       if (data?.success) {
@@ -122,7 +125,7 @@ export default function AdminPage() {
         toast.error("Gagal membuat akun member.");
       }
     } catch (e) {
-      const msg = e?.response?.data?.detail || e.message || "Terjadi kendala saat membuat akun member.";
+      const msg = e?.message || "Terjadi kendala saat membuat akun member via Supabase Admin.";
       toast.error(msg);
     } finally {
       setIsSubmitting(false);
@@ -139,23 +142,22 @@ export default function AdminPage() {
     setTimeout(() => setCopied(false), 2500);
   };
 
-  // Add / Adjust credits via explicit POST
+  // Add / Adjust credits via direct Supabase Admin SDK
   const handleAddCredits = async (memberId) => {
     setIsUpdatingCredit(true);
     try {
-      const data = await adminAdjustCredits({
-        user_id: memberId,
-        amount: Number(creditAmount) || 50,
-        mode: "add",
-        admin_email: user?.email || "iqna.cahayavilla@gmail.com",
-      });
+      const data = await adjustMemberCreditsByAdmin(
+        memberId,
+        Number(creditAmount) || 50,
+        "add"
+      );
       if (data?.success) {
         toast.success(`Berhasil menambahkan ${creditAmount} kredit!`);
         setSelectedMember(null);
         fetchMembers();
       }
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal memperbarui kredit.");
+      toast.error(e?.message || "Gagal memperbarui kredit.");
     } finally {
       setIsUpdatingCredit(false);
     }
