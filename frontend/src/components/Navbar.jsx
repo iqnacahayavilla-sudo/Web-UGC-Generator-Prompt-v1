@@ -22,7 +22,7 @@ import {
 export const Navbar = () => {
   const { pathname } = useLocation();
   const { openPricingModal } = useCredits();
-  const { isAuthenticated, openAuthModal } = useAuth();
+  const { isAuthenticated, isAdmin, openAuthModal } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
@@ -43,7 +43,14 @@ export const Navbar = () => {
                 className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
                 data-testid="nav-beranda"
               >
-                Beranda
+                Dashboard
+              </a>
+              <a
+                href="#pembelajaran"
+                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+                data-testid="nav-pembelajaran"
+              >
+                Pembelajaran
               </a>
               <a
                 href="#cara-kerja"
@@ -59,15 +66,16 @@ export const Navbar = () => {
               >
                 Contoh Prompt
               </a>
-              <button
-                type="button"
-                onClick={openPricingModal}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground flex items-center gap-1.5"
-                data-testid="nav-pricing"
-              >
-                <Crown className="h-3.5 w-3.5 text-amber-500" />
-                <span>Paket & Top Up</span>
-              </button>
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  className="rounded-lg px-3 py-2 text-sm font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-colors flex items-center gap-1.5"
+                  data-testid="nav-admin"
+                >
+                  <Crown className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Admin Panel</span>
+                </Link>
+              )}
             </nav>
           )}
 
@@ -78,16 +86,17 @@ export const Navbar = () => {
           {isAuthenticated ? (
             <UserMenu />
           ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={openAuthModal}
-              className="h-9 gap-1.5 rounded-xl border-border/80 bg-secondary/30 px-3 text-xs font-bold hover:bg-secondary"
-              data-testid="navbar-login-btn"
-            >
-              <LogIn className="h-3.5 w-3.5" />
-              <span>Masuk</span>
-            </Button>
+            <Link to="/login">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1.5 rounded-xl border-border/80 bg-secondary/30 px-3 text-xs font-bold hover:bg-secondary"
+                data-testid="navbar-login-btn"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                <span>Masuk</span>
+              </Button>
+            </Link>
           )}
 
           {/* Desktop Secondary Buttons */}
@@ -104,7 +113,7 @@ export const Navbar = () => {
             ) : (
               <Link to="/" data-testid="navbar-home-btn">
                 <Button variant="outline" className="h-10 rounded-xl px-4 text-sm font-medium">
-                  Beranda
+                  Dashboard
                 </Button>
               </Link>
             )}
@@ -132,7 +141,7 @@ export const Navbar = () => {
               <Link to="/create" onClick={closeMobileMenu}>
                 <Button className="h-12 w-full gap-2 rounded-xl text-sm font-bold shadow-md">
                   <Sparkles className="h-4 w-4" />
-                  <span>Buat Prompt Video UGC Sekarang</span>
+                  <span>Buka Tool Generator Prompt</span>
                   <ArrowRight className="h-4 w-4 ml-auto" />
                 </Button>
               </Link>
@@ -140,7 +149,7 @@ export const Navbar = () => {
               <Link to="/" onClick={closeMobileMenu}>
                 <Button variant="outline" className="h-11 w-full gap-2 rounded-xl text-sm font-medium">
                   <Home className="h-4 w-4" />
-                  <span>Kembali ke Beranda</span>
+                  <span>Ke Member Area</span>
                 </Button>
               </Link>
             )}
@@ -153,15 +162,15 @@ export const Navbar = () => {
                 className="flex items-center gap-2 rounded-xl border border-border/60 bg-secondary/30 p-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary"
               >
                 <Home className="h-4 w-4 text-primary" />
-                <span>Beranda</span>
+                <span>Dashboard</span>
               </a>
               <a
-                href="#cara-kerja"
+                href="#pembelajaran"
                 onClick={closeMobileMenu}
                 className="flex items-center gap-2 rounded-xl border border-border/60 bg-secondary/30 p-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary"
               >
                 <Clapperboard className="h-4 w-4 text-primary" />
-                <span>Cara Kerja</span>
+                <span>Pembelajaran</span>
               </a>
               <a
                 href="#contoh"
@@ -182,6 +191,16 @@ export const Navbar = () => {
                 <Crown className="h-4 w-4 text-amber-500" />
                 <span>Paket & Top Up</span>
               </button>
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  onClick={closeMobileMenu}
+                  className="col-span-2 flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/15 p-2.5 text-xs font-bold text-amber-600 dark:text-amber-400 transition-colors"
+                >
+                  <Crown className="h-4 w-4 text-amber-500" />
+                  <span>Buka Admin Panel (Invite-Only)</span>
+                </Link>
+              )}
             </div>
 
             {/* Bottom Row: Theme Toggle on Mobile */}

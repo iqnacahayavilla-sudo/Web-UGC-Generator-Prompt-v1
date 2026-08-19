@@ -475,17 +475,71 @@ async def get_user_history(user_id: str = Query("guest-user"), limit: int = Quer
     return await supabase_service.get_user_projects_history(user_id=user_id, limit=limit)
 
 
-# ---------- Generation Activity Logs Endpoint ----------
-@api_router.get("/logs/generation")
-async def get_generation_logs(user_id: Optional[str] = Query(None), limit: int = Query(50)):
-    """Mengambil riwayat log aktivitas pembuatan prompt dari koleksi generation_logs MongoDB."""
+# ---------- Admin Panel & User Management (Invite-Only) ----------
+ADMIN_EMAILS = {"sinergivisual.id@gmail.com"}
+
+class AdminCreateUserRequest(BaseModel):
+    email: str
+    password: str
+    full_name: str
+    initial_credits: int = 100
+    plan_type: str = "free"
+    admin_email: Optional[str] = None
+
+class AdminAdjustCreditsRequest(BaseModel):
+    user_id: str
+    amount: int
+    mode: str = "add"  # 'add' | 'set'
+    admin_email: Optional[str] = None
+
+@api_router.post("/admin/users/create")
+async def admin_create_user(req: AdminCreateUserRequest):
+    """Membuat akun member baru oleh Admin (Invite-Only)."""
+    if req.admin_email and req.admin_email.lower() not in ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Hanya akun Admin (sinergivisual.id@gmail.com) yang diizinkan.")
+
     try:
-        query = {"user_id": user_id} if user_id and user_id != "all" else {}
-        cursor = db.generation_logs.find(query, {"_id": 0}).sort("timestamp", -1).limit(limit)
-        logs = await cursor.to_list(length=limit)
-        return {"success": True, "count": len(logs), "logs": logs}
-    except Exception as err:
-        return {"success": False, "count": 0, "logs": [], "error": str(err)}
+        res = await supabase_service.create_member_user(
+            email=req.email.strip().lower(),
+            password=req.password,
+            full_name=req.full_name.strip(),
+            initial_credits=req.initial_credits,
+            plan_type=req.plan_type,
+        )
+        return res
+    except Exception as e:
+        logger.error(f"Admin create user failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Gagal membuat akun member: {str(e)}")
+
+@api_router.get("/admin/users")
+async def admin_list_users(admin_email: Optional[str] = Query(None), limit: int = Query(100)):
+    """Mengambil daftar seluruh member terdaftar untuk Admin Panel."""
+    if admin_email and admin_email.lower() not in ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Hanya akun Admin (sinergivisual.id@gmail.com) yang diizinkan.")
+    
+    try:
+        members = await supabase_service.list_members(limit=limit)
+        return {"success": True, "count": len(members), "users": members}
+    except Exception as e:
+        logger.error(f"Admin list users failed: {e}")
+        return {"success": False, "count": 0, "users": [], "error": str(e)}
+
+@api_router.post("/admin/users/adjust-credits")
+async def admin_adjust_credits(req: AdminAdjustCreditsRequest):
+    """Menambah atau mengatur saldo kredit member oleh Admin."""
+    if req.admin_email and req.admin_email.lower() not in ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Hanya akun Admin (sinergivisual.id@gmail.com) yang diizinkan.")
+
+    try:
+        res = await supabase_service.adjust_member_credits(
+            user_id=req.user_id,
+            amount=req.amount,
+            mode=req.mode
+        )
+        return res
+    except Exception as e:
+        logger.error(f"Admin adjust credits failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Gagal memperbarui kredit: {str(e)}")
 
 
 app.include_router(api_router)

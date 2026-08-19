@@ -349,3 +349,183 @@ class SupabaseService:
                 logger.warning(f"MongoDB history query notice: {e}")
 
         return []
+
+    async def create_member_user(
+        self,
+        email: str,
+        password: str,
+        full_name: str,
+        initial_credits: int = 100,
+        plan_type: str = "free"
+    ) -> Dict[str, Any]:
+        """
+        Membuat akun member baru (Invite-Only) oleh Admin.
+        Mendaftarkan ke Supabase Auth, Profiles, dan MongoDB.
+        """
+        import uuid
+        now_str = datetime.now(timezone.utc).isoformat()
+        user_id = str(uuid.uuid4())
+        created_user = None
+
+        url, key = _get_supabase_config()
+
+        # 1. Coba daftarkan via Supabase Auth REST
+        if is_supabase_configured():
+            try:
+                # Coba signup via auth/v1/signup
+                signup_url = f"{url}/auth/v1/signup"
+                resp = requests.post(
+                    signup_url,
+                    headers={
+                        "apikey": key,
+                        "Authorization": f"Bearer {key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "email": email,
+                        "password": password,
+                        "data": {
+                            "full_name": full_name,
+                            "plan_type": plan_type,
+                        }
+                    },
+                    timeout=15
+                )
+                if resp.status_code in (200, 201):
+                    res_json = resp.json()
+                    user_obj = res_json.get("user") or res_json
+                    if user_obj and "id" in user_obj:
+                        user_id = user_obj["id"]
+                    created_user = user_obj
+                else:
+                    logger.warning(f"Supabase auth signup notice [{resp.status_code}]: {resp.text}")
+            except Exception as auth_err:
+                logger.warning(f"Supabase Auth registration notice: {auth_err}")
+
+            # 2. Simpan profil & kredit ke tabel `profiles` Supabase
+            try:
+                self._call_rest("POST", "profiles", json_data={
+                    "id": user_id,
+                    "email": email,
+                    "full_name": full_name,
+                    "credits": initial_credits,
+                    "plan_type": plan_type,
+                    "updated_at": now_str,
+                })
+            except Exception as prof_err:
+                logger.warning(f"Supabase profiles insert notice: {prof_err}")
+
+            # 3. Simpan ke tabel `user_credits` Supabase
+            try:
+                self._call_rest("POST", "user_credits", json_data={
+                    "user_id": user_id,
+                    "daily_quota": initial_credits,
+                    "daily_credits_remaining": initial_credits,
+                    "bonus_credits": 0,
+                    "last_reset_date": now_str[:10],
+                    "updated_at": now_str,
+                })
+            except Exception as uc_err:
+                logger.warning(f"Supabase user_credits insert notice: {uc_err}")
+
+        # 4. Simpan ke MongoDB untuk redundansi lokal
+        if self.db is not None:
+            try:
+                await self.db.users.update_one(
+                    {"email": email},
+                    {"$set": {
+                        "id": user_id,
+                        "email": email,
+                        "full_name": full_name,
+                        "plan_type": plan_type,
+                        "created_at": now_str,
+                        "updated_at": now_str,
+                    }},
+                    upsert=True
+                )
+                await self.db.user_credits.update_one(
+                    {"user_id": user_id},
+                    {"$set": {
+                        "user_id": user_id,
+                        "email": email,
+                        "daily_quota": initial_credits,
+                        "daily_credits_remaining": initial_credits,
+                        "bonus_credits": 0,
+                        "last_reset_date": now_str[:10],
+                        "updated_at": now_str,
+                    }},
+                    upsert=True
+                )
+            except Exception as db_err:
+                logger.warning(f"MongoDB user record save notice: {db_err}")
+
+        return {
+            "success": True,
+            "user_id": user_id,
+            "email": email,
+            "full_name": full_name,
+            "initial_credits": initial_credits,
+            "plan_type": plan_type,
+            "created_at": now_str,
+        }
+
+    async def list_members(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Daftar seluruh member terdaftar untuk Admin Panel.
+        """
+        members = []
+        # Coba ambil dari Supabase profiles
+        if is_supabase_configured():
+            ok, res = self._call_rest("GET", "profiles", params={
+                "order": "created_at.desc",
+                "limit": str(limit),
+                "select": "*"
+            })
+            if ok and isinstance(res, list) and len(res) > 0:
+                return res
+
+        # Fallback MongoDB
+        if self.db is not None:
+            try:
+                cursor = self.db.users.find({}, {"_id": 0, "password": 0}).sort("created_at", -1).limit(limit)
+                mongo_users = await cursor.to_list(length=limit)
+                for u in mongo_users:
+                    uid = u.get("id") or u.get("user_id")
+                    cred = await self.db.user_credits.find_one({"user_id": uid})
+                    if cred:
+                        u["credits"] = cred.get("daily_credits_remaining", 100) + cred.get("bonus_credits", 0)
+                    members.append(u)
+                if members:
+                    return members
+            except Exception as e:
+                logger.warning(f"MongoDB list_members notice: {e}")
+
+        return members
+
+    async def adjust_member_credits(self, user_id: str, amount: int, mode: str = "add") -> Dict[str, Any]:
+        """
+        Menambah atau mengatur saldo kredit member oleh Admin.
+        """
+        info = await self.get_user_credits_info(user_id)
+        cur = info.get("credits", 0)
+        new_balance = (cur + amount) if mode == "add" else max(0, amount)
+
+        # Update Supabase
+        if is_supabase_configured():
+            self._call_rest("PATCH", f"profiles?id=eq.{user_id}", json_data={"credits": new_balance})
+            self._call_rest("PATCH", f"user_credits?user_id=eq.{user_id}", json_data={"daily_credits_remaining": new_balance})
+
+        # Update MongoDB
+        if self.db is not None:
+            await self.db.user_credits.update_one(
+                {"user_id": user_id},
+                {"$set": {"daily_credits_remaining": new_balance, "bonus_credits": 0}},
+                upsert=True
+            )
+
+        return {
+            "success": True,
+            "user_id": user_id,
+            "previous_credits": cur,
+            "new_credits": new_balance
+        }

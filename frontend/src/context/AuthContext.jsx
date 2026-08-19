@@ -260,6 +260,10 @@ export const AuthProvider = ({ children }) => {
     toast.success("Berhasil logout dari akun.");
   };
 
+  const isAdmin = Boolean(
+    user && (user.email?.toLowerCase() === "sinergivisual.id@gmail.com" || user.user_metadata?.is_admin === true)
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -267,6 +271,7 @@ export const AuthProvider = ({ children }) => {
         profile,
         session,
         isAuthenticated: Boolean(user),
+        isAdmin,
         isLoading,
         isAuthModalOpen,
         authModalMode,

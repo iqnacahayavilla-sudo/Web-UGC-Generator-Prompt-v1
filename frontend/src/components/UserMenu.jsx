@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import { User, LogOut, Crown, Zap, ChevronDown } from "lucide-react";
+import { Link } from "react-router-dom";
+import { User, LogOut, Crown, Zap, ChevronDown, Shield } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCredits } from "@/context/CreditContext";
 import { Button } from "@/components/ui/button";
 
 export const UserMenu = () => {
-  const { user, profile, logout } = useAuth();
+  const { user, profile, logout, isAdmin } = useAuth();
   const { totalCredits, planType, openPricingModal } = useCredits();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -65,6 +66,17 @@ export const UserMenu = () => {
             </div>
 
             <div className="mt-2 space-y-1">
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  onClick={() => setIsOpen(false)}
+                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-colors"
+                >
+                  <Shield className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Admin Panel Portal</span>
+                </Link>
+              )}
+
               <button
                 type="button"
                 onClick={() => {
