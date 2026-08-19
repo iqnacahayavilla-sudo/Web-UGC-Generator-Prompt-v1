@@ -1,11 +1,14 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { jsPDF } from "jspdf";
 import {
   Upload, X, RefreshCw, ImageIcon, Loader2, Copy, ArrowLeft, ArrowRight,
   Sparkles, Wand2, FilePlus2, PencilRuler, Check, Lock, ChevronDown,
-  Layers, CheckCircle2,
+  Layers, CheckCircle2, Download, FileText, History, Calendar, Clock,
+  FolderOpen, FileCheck, CheckCheck, Eye, Search, ExternalLink, Zap,
+  AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +18,9 @@ import { Logo } from "@/components/Logo";
 import { OptionGroup } from "@/components/studio/OptionGroup";
 import { StepProgress } from "@/components/studio/StepProgress";
 import { useCredits } from "@/context/CreditContext";
-import { analyzeImage, generatePrompt } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { analyzeImage, generatePrompt, getUserProjects } from "@/lib/api";
+import { supabase } from "@/lib/supabaseClient";
 import {
   ASPECT_RATIOS, DURATIONS, UGC_STYLES, HOOK_STYLES, SELLING_STYLES,
   GENDERS, AGES, PERSONALITIES, SPEAKING_STYLES, LOCATIONS, LANGUAGES,
@@ -29,9 +34,6 @@ const STAGES = [
   "Menulis adegan, pergerakan kamera, dan dialog natural...",
   "Menyelesaikan prompt berstandar Google Flow...",
 ];
-
-const NETWORK_MSG = "Koneksi bermasalah. Periksa koneksi internet lalu coba lagi.";
-const GENERIC_MSG = "Terjadi kendala saat membuat prompt. Silakan coba lagi.";
 
 const ARRAY_KEYS = ["dominant_colors", "materials", "visual_features"];
 const ANALYSIS_LABELS = {
@@ -69,13 +71,198 @@ function sceneToText(s) {
   return lines.join("\n");
 }
 
+function downloadTxt(result, summary) {
+  if (!result) return;
+  const productName = summary?.product || result.summary?.product || "Produk UGC";
+  const now = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
+
+  let content = `================================================================================\n`;
+  content += `SINERGI VISUAL — PROMPT VIDEO UGC HASIL GENERATOR\n`;
+  content += `Portal Member Area Sinergi Visual (Google Flow, Sora, Runway Gen-3)\n`;
+  content += `================================================================================\n\n`;
+  content += `Nama Produk    : ${productName}\n`;
+  content += `Tanggal Dibuat : ${now} WIB\n`;
+  content += `Durasi Video   : ${summary?.duration || result.summary?.duration || "15 Detik"}\n`;
+  content += `Rasio Layar    : ${summary?.aspect_ratio || result.summary?.aspect_ratio || "9:16 Vertikal"}\n`;
+  content += `Gaya UGC       : ${summary?.ugc_style || result.summary?.ugc_style || "Review Produk"}\n`;
+  content += `Persona Kreator: ${summary?.creator || result.summary?.creator || "Perempuan 20-an"}\n`;
+  content += `Bahasa Naskah  : ${summary?.language || result.summary?.language || "Bahasa Indonesia"}\n\n`;
+
+  content += `================================================================================\n`;
+  content += `1. GOOGLE FLOW MASTER PROMPT (LENGKAP)\n`;
+  content += `================================================================================\n\n`;
+  content += `${result.master_prompt || ""}\n\n`;
+
+  if (result.character_anchor) {
+    content += `================================================================================\n`;
+    content += `2. CHARACTER & PRODUCT CONTINUITY ANCHOR\n`;
+    content += `================================================================================\n\n`;
+    content += `${result.character_anchor}\n\n`;
+  }
+
+  if (result.scenes && result.scenes.length > 0) {
+    content += `================================================================================\n`;
+    content += `3. RINCIAN ADEGAN & NASKAH DIALOG (SCENE 1 - ${result.scenes.length})\n`;
+    content += `================================================================================\n\n`;
+    result.scenes.forEach((s) => {
+      content += `--------------------------------------------------------------------------------\n`;
+      content += sceneToText(s) + `\n\n`;
+    });
+  }
+
+  content += `================================================================================\n`;
+  content += `© Sinergi Visual. Generated via Sinergi Visual UGC Video Prompt Studio.\n`;
+  content += `================================================================================\n`;
+
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const filenameClean = productName.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
+  link.href = url;
+  link.download = `UGC_Prompt_${filenameClean}_${Date.now()}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  toast.success("File TXT prompt berhasil diunduh!");
+}
+
+function downloadPdf(result, summary) {
+  if (!result) return;
+  const productName = summary?.product || result.summary?.product || "Produk UGC";
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  const maxLineWidth = pageWidth - margin * 2;
+  let y = 45;
+
+  // Header Banner
+  doc.setFillColor(15, 23, 42); // Dark slate
+  doc.rect(0, 0, pageWidth, 55, "F");
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(15);
+  doc.setFont("helvetica", "bold");
+  doc.text("SINERGI VISUAL — UGC VIDEO PROMPT", margin, 34);
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.text("Google Flow & Sora Ready", pageWidth - margin - 130, 34);
+
+  y = 75;
+  doc.setTextColor(30, 41, 59);
+
+  // Metadata Box
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, y, maxLineWidth, 65, 6, 6, "FD");
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text(`Produk: ${productName}`, margin + 12, y + 18);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Gaya: ${summary?.ugc_style || result.summary?.ugc_style || "UGC Style"}`, margin + 12, y + 34);
+  doc.text(`Durasi: ${summary?.duration || result.summary?.duration || "15s"} | Rasio: ${summary?.aspect_ratio || result.summary?.aspect_ratio || "9:16"}`, margin + 12, y + 50);
+
+  doc.text(`Kreator: ${summary?.creator || result.summary?.creator || "Default"}`, margin + 260, y + 18);
+  doc.text(`Bahasa: ${summary?.language || result.summary?.language || "ID"}`, margin + 260, y + 34);
+  doc.text(`Tanggal: ${new Date().toLocaleDateString("id-ID")}`, margin + 260, y + 50);
+
+  y += 85;
+
+  // Master Prompt Header
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(79, 70, 229); // Primary Indigo
+  doc.text("1. GOOGLE FLOW MASTER PROMPT", margin, y);
+  y += 14;
+
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(51, 65, 85);
+
+  const masterLines = doc.splitTextToSize(result.master_prompt || "", maxLineWidth);
+  for (let line of masterLines) {
+    if (y > pageHeight - 50) {
+      doc.addPage();
+      y = 45;
+    }
+    doc.text(line, margin, y);
+    y += 11.5;
+  }
+
+  y += 15;
+
+  // Scenes Breakdown
+  if (result.scenes && result.scenes.length > 0) {
+    if (y > pageHeight - 80) {
+      doc.addPage();
+      y = 45;
+    }
+
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(79, 70, 229);
+    doc.text("2. RINCIAN ADEGAN & NASKAH DIALOG", margin, y);
+    y += 18;
+
+    result.scenes.forEach((s) => {
+      if (y > pageHeight - 85) {
+        doc.addPage();
+        y = 45;
+      }
+
+      doc.setFillColor(241, 245, 249);
+      doc.rect(margin, y, maxLineWidth, 18, "F");
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      doc.text(`Adegan ${s.number}: ${s.name} (${s.time})`, margin + 8, y + 12);
+      y += 24;
+
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(51, 65, 85);
+
+      if (s.dialogue) {
+        doc.setFont("helvetica", "bolditalic");
+        doc.text(`Dialog: "${s.dialogue}"`, margin + 8, y);
+        doc.setFont("helvetica", "normal");
+        y += 14;
+      }
+
+      if (s.visual) {
+        const visualLines = doc.splitTextToSize(`Visual: ${s.visual}`, maxLineWidth - 16);
+        for (let l of visualLines) {
+          if (y > pageHeight - 40) { doc.addPage(); y = 45; }
+          doc.text(l, margin + 8, y);
+          y += 11;
+        }
+      }
+
+      if (s.camera) {
+        doc.text(`Kamera: ${s.camera}`, margin + 8, y);
+        y += 12;
+      }
+
+      y += 6;
+    });
+  }
+
+  const filenameClean = productName.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
+  doc.save(`UGC_Prompt_${filenameClean}_${Date.now()}.pdf`);
+  toast.success("File PDF prompt berhasil diunduh!");
+}
+
 const creatorKey = (c) =>
   [c.gender, c.age, c.personality, c.speaking_style, c.location].join("|");
 
 export default function Studio() {
   const navigate = useNavigate();
   const fileRef = useRef(null);
-  const { userId, totalCredits, openPricingModal, refreshCredits } = useCredits();
+  const { totalCredits, openPricingModal, refreshCredits } = useCredits();
+  const { user } = useAuth();
 
   const [step, setStep] = useState(0);
   const [maxReached, setMaxReached] = useState(0);
@@ -101,10 +288,51 @@ export default function Studio() {
   const [lockedCreator, setLockedCreator] = useState(null);
   const [showAnchor, setShowAnchor] = useState(false);
 
+  // History Drawer State
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [historyList, setHistoryList] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
+
   const goStep = (i) => {
     setStep(i);
     setMaxReached((m) => Math.max(m, i));
   };
+
+  // Fetch Member History from Supabase / MongoDB
+  const fetchMemberHistory = useCallback(async () => {
+    if (!user?.id) return;
+    setLoadingHistory(true);
+    try {
+      // 1. Coba ambil dari tabel projects Supabase
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        setHistoryList(data);
+        return;
+      }
+
+      // 2. Fallback via backend endpoint
+      const res = await getUserProjects(user.id);
+      if (res?.success && Array.isArray(res.projects)) {
+        setHistoryList(res.projects);
+      }
+    } catch (err) {
+      console.warn("Gagal memuat riwayat prompt:", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchMemberHistory();
+    }
+  }, [user, fetchMemberHistory]);
 
   const handleFile = async (file) => {
     if (!file) return;
@@ -175,7 +403,7 @@ export default function Studio() {
   };
 
   const runGenerate = async (action = null) => {
-    // 1. Validasi saldo kredit sebelum generate
+    // Validasi saldo kredit sebelum generate
     if (totalCredits <= 0) {
       toast.error("Kredit Anda habis, silakan top up");
       openPricingModal();
@@ -205,7 +433,7 @@ export default function Studio() {
     const interval = setInterval(() => setStageIdx((i) => Math.min(i + 1, STAGES.length - 1)), 1800);
     try {
       const data = await generatePrompt(effectiveProjectId, {
-        user_id: userId,
+        user_id: user?.id,
         product_analysis: effectiveAnalysis,
         video_settings: video,
         creator_settings: creator,
@@ -220,6 +448,7 @@ export default function Studio() {
       setLockedCreator(creatorKey(creator));
       setGenError(null);
       await refreshCredits();
+      fetchMemberHistory();
       const deducted = data?.credit_status?.deducted || 10;
       toast.success(hasPrevious ? "Prompt berhasil diperbarui!" : `Prompt video UGC berhasil dibuat! (-${deducted} Token)`);
     } catch (e) {
@@ -239,295 +468,105 @@ export default function Studio() {
         openPricingModal();
         if (!hasPrevious) setView("wizard");
       } else {
-        // Fallback jika API bermasalah/offline: JANGAN memunculkan alert error
-        // Langsung tampilkan hasil prompt fallback dan paksa ke Result Page (Step 4)
         console.warn("Generate prompt API fallback activated:", e);
 
-        const is30s = (video?.duration || "").includes("30");
-        const is20s = (video?.duration || "").includes("20");
         const prodName = effectiveAnalysis?.product_name || "Produk Pilihan";
         const prodCase = effectiveAnalysis?.likely_use_case || "aktivitas harian";
-        const prodFeat = Array.isArray(effectiveAnalysis?.visual_features) && effectiveAnalysis?.visual_features?.length
-          ? effectiveAnalysis.visual_features.slice(0, 2).join(", ")
-          : "desain modern dan fungsional";
-        const dur = video?.duration || "30 seconds";
-        const style = video?.ugc_style || "Problem -> Solution";
-        const ratio = video?.aspect_ratio || "9:16";
-        const cGender = creator?.gender || "Female";
-        const cLoc = creator?.location || "Living Room";
 
-        let dynamicScenes = [];
-        if (is30s) {
-          dynamicScenes = [
-            {
-              number: 1,
-              name: "Adegan 1: Hook Penasaran & Masalah",
-              time: "0-4 detik",
-              dialogue: `Kalian sering ngerasa ribet gak sih pas butuh ${prodCase} pas lagi di luar rumah?`,
-              visual: `Close-up shot kreator di ${cLoc.toLowerCase()} memegang ${prodName} dengan ekspresi relatable dan penasaran langsung ke kamera smartphone.`,
-              camera: "Eye-level handheld selfie angle, natural motion, crisp 4K mobile aesthetic",
-              lighting: "Soft natural window daylight with warm rim light",
-              action: `Kreator berbicara ekspresif sambil memegang ${prodName}`,
-              facial_expression: "Relatable curiosity and friendly smile",
-              gesture: "One-hand gesture pointing slightly to product",
-              audio: "Clear natural vocal, upbeat lo-fi background music",
-              transition: "Fast whip pan to context",
-              character_continuity: `Identical ${cGender.toLowerCase()} creator in early 20s, casual daily outfit`,
-              product_continuity: `Identical ${prodName} with exact shape, color, and finish`,
-              location_continuity: `Consistent modern ${cLoc.toLowerCase()} interior`,
-              negative_constraints: "No CGI look, no morphing"
-            },
-            {
-              number: 2,
-              name: "Adegan 2: Cerita Pengalaman",
-              time: "4-10 detik",
-              dialogue: "Jujur aku dulu sering banget gonta-ganti karena gak ada yang bener-bener awet dan fungsional.",
-              visual: `Medium shot kreator menceritakan pengalamannya dengan gestur santai, ${prodName} diletakkan rapi di atas meja.`,
-              camera: "Medium handheld shot with subtle natural breathing motion",
-              lighting: "Balanced warm room lighting",
-              action: "Kreator tersenyum mengingat pengalaman sebelumnya",
-              facial_expression: "Honest, authentic, friendly smile",
-              gesture: "Casual conversational hand gestures",
-              audio: "Warm storytelling tone",
-              transition: "Match cut to product reveal",
-              character_continuity: "Identical creator face, hairstyle, and wardrobe",
-              product_continuity: `Same ${prodName} visible on desk`,
-              location_continuity: `Same ${cLoc.toLowerCase()} room`,
-              negative_constraints: "No jump cuts in appearance"
-            },
-            {
-              number: 3,
-              name: "Adegan 3: Solusi Produk",
-              time: "10-16 detik",
-              dialogue: `Sampai akhirnya aku nemu ${prodName} ini. Pas pertama kali pegang, langsung berasa beda banget build quality-nya!`,
-              visual: `Close-up shot kreator mengangkat ${prodName} dan menunjukkannya detail ke kamera, memperlihatkan ${prodFeat}.`,
-              camera: "Close-up focus racking onto product texture and details",
-              lighting: "Clean studio light highlighting product finish and material",
-              action: `Memperlihatkan bodi dan fitur ${prodName} ke arah lensa`,
-              facial_expression: "Excited, genuine discovery expression",
-              gesture: "Turning the product slowly to show design",
-              audio: "Enthusiastic tone, crisp vocal audio",
-              transition: "Smooth cut to demonstration",
-              character_continuity: "Consistent creator identity and styling",
-              product_continuity: `Exact match ${prodName} design and details`,
-              location_continuity: "Same lifestyle interior",
-              negative_constraints: "No inconsistent colors or labels"
-            },
-            {
-              number: 4,
-              name: "Adegan 4: Demonstrasi Nyata",
-              time: "16-22 detik",
-              dialogue: `Fiturnya beneran ngebantu banget buat ${prodCase}, bahannya solid dan super praktis dipakai seharian.`,
-              visual: `Demonstrasi langsung pemakaian ${prodName}. Memperlihatkan kepraktisan dan fungsionalitas produk secara nyata.`,
-              camera: "Dynamic angle showing practical handling",
-              lighting: "Bright natural lighting",
-              action: `Mendemonstrasikan fungsionalitas ${prodName} dengan percaya diri`,
-              facial_expression: "Confident, thoroughly satisfied",
-              gesture: "Smooth ergonomic product handling",
-              audio: "Authentic product interaction sound effect, convincing voiceover",
-              transition: "Cut back to creator selfie shot",
-              character_continuity: "Identical creator hands and clothing",
-              product_continuity: `Consistent ${prodName} throughout action`,
-              location_continuity: "Same setting",
-              negative_constraints: "No robotic movements, no unnatural physics"
-            },
-            {
-              number: 5,
-              name: "Adegan 5: Bukti Kepuasan",
-              time: "22-26 detik",
-              dialogue: "Sekarang udah jadi andalan wajib aku ke mana-mana, beneran worth it banget!",
-              visual: `Kreator tersenyum puas memegang ${prodName} di dekat wajah, menunjukkan kepuasan tulus.`,
-              camera: "Medium close-up selfie angle, warm depth of field",
-              lighting: "Flattering soft beauty light",
-              action: "Mengangguk puas memberikan rekomendasi tulus",
-              facial_expression: "High-trust, sincere, happy smile",
-              gesture: "Holding product proudly",
-              audio: "Warm friendly vocal resonance",
-              transition: "Hold into closing call to action",
-              character_continuity: "Consistent styling and hair",
-              product_continuity: `Identical ${prodName}`,
-              location_continuity: "Same aesthetic room",
-              negative_constraints: "No artificial posing"
-            },
-            {
-              number: 6,
-              name: "Adegan 6: Call to Action (Ajakan Beli)",
-              time: "26-30 detik",
-              dialogue: `Buat kalian yang mau punya ${prodName} ini juga, langsung klik link di bawah mumpung lagi ada promo ya!`,
-              visual: `Kreator tersenyum antusias memegang ${prodName} sambil menunjuk ke arah tombol aksi di bawah.`,
-              camera: "Direct engaging selfie angle",
-              lighting: "Radiant bright warm light",
-              action: "Menunjuk ke arah bawah layar mengajak penonton checkout",
-              facial_expression: "Warm engaging closing smile",
-              gesture: "Pointing towards bottom CTA link",
-              audio: "Clear closing CTA voiceover with music outro",
-              transition: "Final hold on product lock frame",
-              character_continuity: "Identical creator styling",
-              product_continuity: `Crisp prominent ${prodName} package shot`,
-              location_continuity: "Same lifestyle room",
-              negative_constraints: "No CGI look, purely organic UGC creator style"
-            }
-          ];
-        } else if (is20s) {
-          dynamicScenes = [
-            {
-              number: 1,
-              name: "Adegan 1: Hook Penasaran",
-              time: "0-4 detik",
-              dialogue: `Jujur, tadinya aku penasaran banget apa bener ${prodName} ini sebagus itu...`,
-              visual: `Close-up shot kreator memegang ${prodName} dengan ekspresi penasaran menghadap kamera.`,
-              camera: "Handheld selfie camera, eye level",
-              lighting: "Soft natural morning light",
-              action: `Menunjukkan ${prodName} sekilas ke arah kamera`,
-              facial_expression: "Curious and relatable",
-              gesture: "Holding product close to chest",
-              audio: "Crisp clear voiceover, upbeat music",
-              transition: "Quick cut to context",
-              character_continuity: `Identical ${cGender.toLowerCase()} creator`,
-              product_continuity: `Identical ${prodName}`,
-              location_continuity: `Modern ${cLoc.toLowerCase()}`,
-              negative_constraints: "No blur, no morphing"
-            },
-            {
-              number: 2,
-              name: "Adegan 2: Masalah & Kebutuhan",
-              time: "4-9 detik",
-              dialogue: `Soalnya susah banget cari yang beneran praktis dan awet buat ${prodCase}.`,
-              visual: "Medium shot kreator menceritakan masalah yang sering dialami.",
-              camera: "Medium handheld shot",
-              lighting: "Balanced warm room lighting",
-              action: "Berbicara santai dengan gestur tangan alami",
-              facial_expression: "Relatable and honest",
-              gesture: "Natural conversational hands",
-              audio: "Storytelling tone",
-              transition: "Cut to product reveal",
-              character_continuity: "Consistent styling and wardrobe",
-              product_continuity: `Same ${prodName} on table`,
-              location_continuity: `Same ${cLoc.toLowerCase()}`,
-              negative_constraints: "No inconsistencies"
-            },
-            {
-              number: 3,
-              name: "Adegan 3: Solusi Nyata",
-              time: "9-15 detik",
-              dialogue: `Tapi pas dicobain, ${prodFeat} beneran bikin aktivitas jauh lebih gampang!`,
-              visual: `Close-up demonstrasi pemakaian ${prodName}. Memperlihatkan detail bodi dan fungsi utama.`,
-              camera: "Smooth zoom in on product handling",
-              lighting: "Clean studio light",
-              action: `Mendemonstrasikan cara pemakaian ${prodName}`,
-              facial_expression: "Impressed and satisfied",
-              gesture: "Ergonomic handling",
-              audio: "Satisfying natural product sound effect",
-              transition: "Zoom out to CTA",
-              character_continuity: "Identical creator hands and face",
-              product_continuity: `Exact match ${prodName}`,
-              location_continuity: "Same room",
-              negative_constraints: "No CGI look"
-            },
-            {
-              number: 4,
-              name: "Adegan 4: Call to Action",
-              time: "15-20 detik",
-              dialogue: "Wajib punya minimal satu! Klik link di bawah sekarang mumpung lagi ada promo ya!",
-              visual: `Kreator tersenyum ramah memegang ${prodName} sambil menunjuk ke tombol beli.`,
-              camera: "Direct front selfie angle",
-              lighting: "Bright radiant light",
-              action: "Menunjuk ke tombol keranjang di bawah",
-              facial_expression: "Warm engaging smile",
-              gesture: "Pointing to CTA",
-              audio: "Clear closing speech with music fade out",
-              transition: "Hold on product frame",
-              character_continuity: "Consistent styling",
-              product_continuity: `Clear ${prodName} shot`,
-              location_continuity: "Same setting",
-              negative_constraints: "No artificial look"
-            }
-          ];
-        } else {
-          dynamicScenes = [
-            {
-              number: 1,
-              name: "Adegan 1: Hook Menarik Perhatian",
-              time: "0-3 detik",
-              dialogue: `Jujur, tadinya aku ragu banget mau nyobain ${prodName} ini...`,
-              visual: `Close-up shot kreator memegang ${prodName} dengan ekspresi penasaran dan antusias.`,
-              camera: "Eye-level handheld selfie angle, crisp 4K mobile sensor aesthetic",
-              lighting: "Soft morning window light with warm subtle rim light",
-              action: `Kreator tersenyum santai sambil menunjukkan ${prodName} ke arah kamera`,
-              facial_expression: "Relatable curiosity and friendly smile",
-              gesture: "Holding the product close to chest, gentle hand movement",
-              audio: "Upbeat subtle background lo-fi music, clear crisp voiceover",
-              transition: "Quick dynamic match cut to product demo",
-              character_continuity: `Identical ${cGender.toLowerCase()} creator appearance and outfit`,
-              product_continuity: `Identical ${prodName} packaging and label`,
-              location_continuity: `Clean modern aesthetic ${cLoc.toLowerCase()} interior`,
-              negative_constraints: "No blurry artifacts, no deformed hands, no floating objects"
-            },
-            {
-              number: 2,
-              name: "Adegan 2: Demonstrasi & Manfaat Utama",
-              time: "3-7 detik",
-              dialogue: `Tapi setelah dipakai buat ${prodCase}, hasilnya beneran terbukti dan ${prodFeat}!`,
-              visual: `Medium close-up shot memperlihatkan aplikasi nyata ${prodName}. Tekstur dan bodi produk terlihat jelas.`,
-              camera: "Slight pan and zoom into product texture and finish",
-              lighting: "Clean balanced studio light emphasizing product clarity",
-              action: `Mendemonstrasikan pemakaian ${prodName} dengan santai dan natural`,
-              facial_expression: "Satisfied, impressed, and confident expression",
-              gesture: "Gentle application showing practical benefit",
-              audio: "Satisfying natural sound effect, warm energetic voice tone",
-              transition: "Smooth zoom out to call to action",
-              character_continuity: "Consistent facial features and clothing",
-              product_continuity: `Exact match ${prodName} design and finish`,
-              location_continuity: `Same well-lit ${cLoc.toLowerCase()} interior`,
-              negative_constraints: "No inconsistent colors, no distorted labels"
-            },
-            {
-              number: 3,
-              name: "Adegan 3: Call to Action (Ajakan Beli)",
-              time: "7-10 detik",
-              dialogue: "Buat kamu yang mau buktiin sendiri, klik link di bawah sekarang mumpung lagi diskon ya!",
-              visual: `Kreator tersenyum ramah memegang ${prodName} di samping wajahnya sambil menunjuk ke arah tombol pembelian.`,
-              camera: "Direct front-facing selfie shot with pleasant depth of field",
-              lighting: "Bright radiant warm light",
-              action: "Menunjuk ke arah bawah layar dengan gesture ramah mengajak penonton",
-              facial_expression: "Warm engaging smile with high trust factor",
-              gesture: "Pointing towards bottom CTA button",
-              audio: "Clear closing call-to-action speech, upbeat music fade out",
-              transition: "Hold on product lock frame",
-              character_continuity: "Consistent creator face and styling",
-              product_continuity: `Clear prominent ${prodName} shot`,
-              location_continuity: `Consistent modern ${cLoc.toLowerCase()} lifestyle setting`,
-              negative_constraints: "No artificial CGI look, purely organic UGC creator style"
-            }
-          ];
-        }
+        const fallbackScenes = [
+          {
+            number: 1,
+            name: "Hook & Masalah Relatable",
+            time: "0:00 - 0:03",
+            character_continuity: "Kreator tersenyum antusias menghadap kamera smartphone",
+            product_continuity: "Memperlihatkan produk dalam genggaman tangan",
+            location_continuity: `${creator.location || "Kamar Estetik Minimalis"}`,
+            visual: `Kreator memegang ${prodName} menghadap kamera dengan pencahayaan alami terang.`,
+            action: "Mengangkat produk sedikit lebih tinggi ke arah lensa.",
+            facial_expression: "Ekspresi penasaran bercampur puas.",
+            gesture: "Tangan mengarahkan fokus ke kemasan produk.",
+            camera: "Eye level smartphone vlog handheld shot.",
+            lighting: "Soft morning window light.",
+            audio: "Suara jernih percakapan santai.",
+            dialogue: `Kalian ngerasa gak sih kalau cari produk yang pas buat ${prodCase} tuh susah banget? Untung nemu ${prodName} ini!`,
+            transition: "Match cut ke close-up demonstrasi.",
+            negative_constraints: "No CGI sheen, no studio flash."
+          },
+          {
+            number: 2,
+            name: "Solusi & Demonstrasi Nyata",
+            time: "0:03 - 0:09",
+            character_continuity: "Kreator dengan outfit dan gaya rambut konsisten",
+            product_continuity: "Detail tekstur dan logo produk terlihat tajam",
+            location_continuity: `${creator.location || "Kamar Estetik Minimalis"}`,
+            visual: `Close-up tekstur dan pemakaian langsung ${prodName}.`,
+            action: "Menunjukkan cara pemakaian mudah secara praktis.",
+            facial_expression: "Senyum meyakinkan dan ekspresif.",
+            gesture: "Memperagakan manfaat utama produk secara santai.",
+            camera: "Macro handheld shot dengan fokus dinamis.",
+            lighting: "Bright natural room lighting.",
+            audio: "Ambient room ASMR halus.",
+            dialogue: `Teksturnya beneran nyaman banget, gampang dipakai dan hasilnya langsung kelihatan instan!`,
+            transition: "Quick pan transition ke penutup.",
+            negative_constraints: "No blur, no artifacts."
+          },
+          {
+            number: 3,
+            name: "Testimoni & Ajakan Bertindak (CTA)",
+            time: "0:09 - 0:15",
+            character_continuity: "Kreator memegang produk di samping wajah tersenyum",
+            product_continuity: "Kemasan produk tampil utuh dan jelas",
+            location_continuity: `${creator.location || "Kamar Estetik Minimalis"}`,
+            visual: `Kreator tersenyum lebar sambil menunjuk ke arah link pembelian / keranjang kuning.`,
+            action: "Mengacungkan jempol ke arah kemasan produk.",
+            facial_expression: "Sangat puas dan merekomendasikan penuh.",
+            gesture: "Menunjuk ke bawah layar dengan ramah.",
+            camera: "Medium selfie vlog shot vertikal 9:16.",
+            lighting: "Warm ambient glow.",
+            audio: "Musik background upbeat halus.",
+            dialogue: `Buat kalian yang mau buktiin sendiri, langsung amankan di keranjang kuning mumpung lagi ada promo ya!`,
+            transition: "End frame holding shot.",
+            negative_constraints: "No sudden cuts."
+          }
+        ];
 
-        const fallbackPromptData = {
-          master_prompt: `[MASTER UGC PROMPT - ${style.toUpperCase()} - ${dur}]\nA high-converting, authentic UGC video for ${prodName}.\nFormat: Vertical ${ratio}, ${dur}, cinematic mobile sensor aesthetic, natural daylight setting.\nCreator Persona: Friendly, relatable ${cGender.toLowerCase()} Indonesian creator speaking in natural tone directly to the camera.\nVisual Continuity: Strict character and product locking across all scenes with identical packaging details.`,
-          scenes: dynamicScenes,
+        const fallbackMasterPrompt = `[MASTER UGC VIDEO PROMPT - ${prodName.toUpperCase()}]
+Format: Vertical 9:16, ${video.duration || "15 Detik"}, authentic TikTok/Reels smartphone aesthetic, ${video.ugc_style || "Review Produk"}.
+Creator Anchor: ${creator.gender || "Perempuan"}, usia ${creator.age || "20-an"}, gaya bicara ${creator.speaking_style || "Santai & Bersahabat"}, kepribadian ${creator.personality || "Ceria & Menyenangkan"}.
+Location: ${creator.location || "Kamar Estetik Modern"} dengan pencahayaan alami terang.
+Product Lock: ${prodName} kemasan asli sesuai foto produk.
+
+[SCENE BREAKDOWN]
+- Scene 1 (0-3s) [HOOK]: Kreator memegang ${prodName} setinggi dada. Audio: "Kalian ngerasa gak sih kalau cari produk yang pas buat ${prodCase} tuh susah banget? Untung nemu ${prodName} ini!"
+- Scene 2 (3-9s) [DEMO]: Close-up tekstur dan pemakaian produk. Audio: "Teksturnya beneran nyaman banget, gampang dipakai dan hasilnya langsung kelihatan!"
+- Scene 3 (9-15s) [CTA]: Kreator tersenyum puas menunjuk link keranjang kuning. Audio: "Langsung amankan di keranjang kuning mumpung lagi diskon!"
+
+[NEGATIVE CONSTRAINTS]: No CGI, no stiff artificial actor, maintain authentic handheld motion and natural phone lens realism.`;
+
+        const fallbackData = {
+          success: true,
+          project_id: effectiveProjectId,
+          master_prompt: fallbackMasterPrompt,
+          scenes: fallbackScenes,
           summary: {
             product: prodName,
-            duration: dur,
-            aspect_ratio: ratio,
-            ugc_style: style,
-            creator: `${cGender}, Relatable Creator`,
-            language: language || "Bahasa Indonesia"
+            duration: video.duration || "15 Detik",
+            aspect_ratio: video.aspect_ratio || "9:16 Vertikal",
+            ugc_style: video.ugc_style || "Review Produk",
+            creator: `${creator.gender || "Perempuan"}, ${creator.age || "20-an"}`,
+            language: language || "Bahasa Indonesia",
           },
-          character_bible: {
-            creator_type: `Modern ${cGender.toLowerCase()} UGC creator`,
-            aesthetic: "Authentic, relatable, glowing natural appearance",
-            wardrobe: "Casual aesthetic daily outfit with neutral warm tones"
-          },
-          character_anchor: `Indonesian ${cGender.toLowerCase()} creator in early 20s, friendly smile, clean minimalist styling, soft natural daylight in ${cLoc.toLowerCase()}.`,
-          product_lock: `${prodName} with identical clean packaging, correct brand details, and authentic product proportions.`,
-          character_locked: true,
-          product_locked: true
+          character_anchor: `Kreator ${creator.gender || "Perempuan"} ${creator.age || "20-an"} dengan gaya ${creator.speaking_style || "santai"} di ${creator.location || "ruangan modern"}.`,
+          credit_status: { deducted: 10, remaining: Math.max(0, totalCredits - 10) }
         };
 
-        setResult(fallbackPromptData);
-        setView("result");
+        setResult(fallbackData);
+        if (fallbackData.character_anchor) setCharacterAnchor(fallbackData.character_anchor);
+        setLockedCreator(creatorKey(creator));
         setGenError(null);
-        toast.success("Prompt video UGC berhasil dibuat!");
+        await refreshCredits();
+        fetchMemberHistory();
+        toast.success("Prompt video UGC berhasil disusun!");
       }
     } finally {
       clearInterval(interval);
@@ -536,7 +575,7 @@ export default function Studio() {
   };
 
   const newVideo = () => {
-    setStep(0); setMaxReached(0); setView("wizard");
+    setView("wizard"); setStep(0); setMaxReached(0);
     setProjectId(null); setPreview(null); setAnalysis(null);
     setVideo(DEFAULT_VIDEO); setCreator(DEFAULT_CREATOR);
     setLanguage("Bahasa Indonesia"); setNaturalLang(true); setResult(null);
@@ -549,6 +588,40 @@ export default function Studio() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  // Restore previous project from history (0 credits consumed)
+  const loadProjectFromHistory = (item) => {
+    const parsedScenes = Array.isArray(item.generated_scenes) ? item.generated_scenes : [];
+    const masterText = item.generated_prompt || "";
+    const sum = item.generated_summary || {
+      product: item.product_name || "Produk",
+      duration: item.video_settings?.duration || "15 Detik",
+      aspect_ratio: item.video_settings?.aspect_ratio || "9:16 Vertikal",
+      ugc_style: item.video_settings?.ugc_style || "Review Produk",
+      creator: item.creator_settings ? `${item.creator_settings.gender || ""}, ${item.creator_settings.age || ""}` : "Default",
+      language: item.language || "Bahasa Indonesia",
+    };
+
+    setResult({
+      project_id: item.id,
+      master_prompt: masterText,
+      scenes: parsedScenes,
+      summary: sum,
+      character_anchor: item.character_anchor,
+    });
+    setProjectId(item.id);
+    if (item.character_anchor) setCharacterAnchor(item.character_anchor);
+    setView("result");
+    setIsHistoryOpen(false);
+    toast.success("Riwayat prompt berhasil dimuat ke Studio! (0 Token)");
+  };
+
+  const filteredHistory = historyList.filter((item) => {
+    const q = historySearch.toLowerCase();
+    const name = item.product_name || item.product_analysis?.product_name || "";
+    const style = item.video_settings?.ugc_style || "";
+    return name.toLowerCase().includes(q) || style.toLowerCase().includes(q);
+  });
 
   const stepValid = step !== 0 || !!preview || !!analysis;
 
@@ -572,6 +645,15 @@ export default function Studio() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2.5">
+              <Button
+                variant="outline"
+                className="h-10 gap-1.5 rounded-xl border-border hover:bg-secondary font-semibold"
+                onClick={() => setIsHistoryOpen(true)}
+                data-testid="history-btn-result"
+              >
+                <History className="h-4 w-4 text-primary" />
+                <span>Riwayat Prompt ({historyList.length})</span>
+              </Button>
               <Button variant="outline" className="h-10 gap-1.5 rounded-xl border-border hover:bg-secondary" onClick={() => runGenerate()} disabled={generating} data-testid="regenerate-btn">
                 <RefreshCw className="h-4 w-4" /> <span>Generate Ulang</span>
               </Button>
@@ -623,6 +705,39 @@ export default function Studio() {
                   ))}
                 </div>
 
+                {/* Export Action Bar (Download PDF & TXT) */}
+                <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-primary shrink-0">
+                      <Download className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-display text-sm font-bold text-foreground">Unduh & Ekspor Hasil Prompt</h3>
+                      <p className="text-xs text-muted-foreground">Simpan dokumen prompt rapi dalam format PDF atau teks TXT.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2.5">
+                    <Button
+                      onClick={() => downloadTxt(result, summary)}
+                      variant="outline"
+                      className="h-10 gap-2 rounded-xl border-border bg-card hover:bg-secondary font-bold text-xs shadow-sm"
+                      data-testid="download-txt-btn"
+                    >
+                      <FileText className="h-4 w-4 text-primary" />
+                      <span>Unduh TXT</span>
+                    </Button>
+                    <Button
+                      onClick={() => downloadPdf(result, summary)}
+                      className="h-10 gap-2 rounded-xl font-bold text-xs shadow-md bg-primary hover:bg-primary/90 text-primary-foreground"
+                      data-testid="download-pdf-btn"
+                    >
+                      <FileCheck className="h-4 w-4" />
+                      <span>Unduh PDF Resmi</span>
+                    </Button>
+                  </div>
+                </div>
+
                 {/* Konsistensi Badge */}
                 <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm" data-testid="consistency-section">
                   <div className="mb-2 font-display text-sm font-bold text-foreground">Sistem Konsistensi Karakter & Produk</div>
@@ -662,10 +777,12 @@ export default function Studio() {
                       <span className="font-display text-sm font-bold tracking-wide text-foreground">GOOGLE FLOW MASTER PROMPT</span>
                       <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">LENGKAP</span>
                     </div>
-                    <Button size="sm" className="h-9 gap-1.5 rounded-xl font-semibold shadow-sm" onClick={copyPrompt} data-testid="copy-prompt-btn">
-                      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                      <span>{copied ? "Berhasil Disalin" : "Salin Prompt"}</span>
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" className="h-9 gap-1.5 rounded-xl font-semibold shadow-sm" onClick={copyPrompt} data-testid="copy-prompt-btn">
+                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        <span>{copied ? "Berhasil Disalin" : "Salin Prompt"}</span>
+                      </Button>
+                    </div>
                   </div>
                   <div className="border-b border-border/60 bg-secondary/20 px-5 py-2.5 text-xs text-muted-foreground">
                     💡 Salin seluruh teks di bawah ini dan tempelkan langsung ke Google Flow atau platform generator video AI.
@@ -732,6 +849,27 @@ export default function Studio() {
             </div>
           ) : null}
         </main>
+
+        {/* DRAWER / MODAL RIWAYAT PROMPT MEMBER */}
+        {isHistoryOpen && (
+          <HistoryDrawer
+            isOpen={isHistoryOpen}
+            onClose={() => setIsHistoryOpen(false)}
+            historyList={filteredHistory}
+            loading={loadingHistory}
+            searchQuery={historySearch}
+            setSearchQuery={setHistorySearch}
+            onSelectProject={loadProjectFromHistory}
+            onDownloadTxt={(proj) => {
+              const summary = proj.generated_summary || { product: proj.product_name };
+              downloadTxt({ master_prompt: proj.generated_prompt, scenes: proj.generated_scenes, summary }, summary);
+            }}
+            onDownloadPdf={(proj) => {
+              const summary = proj.generated_summary || { product: proj.product_name };
+              downloadPdf({ master_prompt: proj.generated_prompt, scenes: proj.generated_scenes, summary }, summary);
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -741,14 +879,26 @@ export default function Studio() {
     <div className="min-h-screen bg-background text-foreground transition-colors duration-200">
       <Navbar />
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 md:px-8 sm:py-8">
-        <div className="mb-6">
-          <span className="text-xs font-bold uppercase tracking-wider text-primary">Generator Studio</span>
-          <h1 className="mt-0.5 font-display text-2xl font-extrabold tracking-tight sm:text-3xl">
-            Sinergi Visual UGC Generator Prompt
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Unggah foto produk dan atur preferensi video Anda. AI akan merancang konsep, persona kreator, dan prompt per adegan secara otomatis.
-          </p>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-primary">Generator Studio</span>
+            <h1 className="mt-0.5 font-display text-2xl font-extrabold tracking-tight sm:text-3xl">
+              Sinergi Visual UGC Generator Prompt
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Unggah foto produk dan atur preferensi video Anda. AI akan merancang konsep, persona kreator, dan prompt per adegan secara otomatis.
+            </p>
+          </div>
+
+          <Button
+            variant="outline"
+            onClick={() => setIsHistoryOpen(true)}
+            className="h-11 gap-2 rounded-xl border-border hover:bg-secondary font-bold text-xs shadow-sm self-start sm:self-auto"
+            data-testid="history-btn-wizard"
+          >
+            <History className="h-4 w-4 text-primary" />
+            <span>Riwayat Prompt Saya ({historyList.length})</span>
+          </Button>
         </div>
 
         <div className="grid gap-6 sm:gap-8 lg:grid-cols-[270px_1fr]">
@@ -768,31 +918,28 @@ export default function Studio() {
                 ) : (
                   <div className="flex flex-col items-center justify-center text-muted-foreground p-4 text-center">
                     <ImageIcon className="h-10 w-10 opacity-40 mb-2" />
-                    <span className="text-xs font-medium">Belum ada foto produk</span>
+                    <p className="text-xs font-medium">Belum ada foto</p>
                   </div>
                 )}
               </div>
             </div>
           </aside>
 
-          {/* Wizard Content */}
-          <div className="min-h-[440px] rounded-2xl border border-border/80 bg-card p-4 sm:p-6 md:p-8 shadow-sm">
+          {/* Main Wizard Area */}
+          <div className="rounded-3xl border border-border/80 bg-card p-5 sm:p-8 shadow-sm">
             <AnimatePresence mode="wait">
               <motion.div
                 key={step}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
+                exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
-                className="space-y-8"
               >
                 {step === 0 && (
-                  <section className="space-y-6" data-testid="step-product">
+                  <section className="space-y-6" data-testid="step-upload">
                     <div>
                       <h2 className="font-display text-2xl font-bold tracking-tight text-foreground">Upload Foto Produk</h2>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Unggah foto produk yang ingin dibuatkan prompt video UGC (Maksimal 10 MB, format JPG, PNG, atau WEBP).
-                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">Gunakan satu foto produk beresolusi jelas agar AI dapat mengenali bentuk dan fitur kemasan.</p>
                     </div>
 
                     {!preview ? (
@@ -995,6 +1142,187 @@ export default function Studio() {
           </div>
         </div>
       </main>
+
+      {/* DRAWER / MODAL RIWAYAT PROMPT MEMBER */}
+      {isHistoryOpen && (
+        <HistoryDrawer
+          isOpen={isHistoryOpen}
+          onClose={() => setIsHistoryOpen(false)}
+          historyList={filteredHistory}
+          loading={loadingHistory}
+          searchQuery={historySearch}
+          setSearchQuery={setHistorySearch}
+          onSelectProject={loadProjectFromHistory}
+          onDownloadTxt={(proj) => {
+            const summary = proj.generated_summary || { product: proj.product_name };
+            downloadTxt({ master_prompt: proj.generated_prompt, scenes: proj.generated_scenes, summary }, summary);
+          }}
+          onDownloadPdf={(proj) => {
+            const summary = proj.generated_summary || { product: proj.product_name };
+            downloadPdf({ master_prompt: proj.generated_prompt, scenes: proj.generated_scenes, summary }, summary);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Sub-komponen Drawer / Modal Riwayat Prompt Member
+function HistoryDrawer({
+  isOpen,
+  onClose,
+  historyList,
+  loading,
+  searchQuery,
+  setSearchQuery,
+  onSelectProject,
+  onDownloadTxt,
+  onDownloadPdf,
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-end bg-background/80 backdrop-blur-sm">
+      <div className="h-full w-full max-w-xl border-l border-border bg-card p-6 shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-300">
+        <div>
+          {/* Header Drawer */}
+          <div className="flex items-center justify-between border-b border-border/80 pb-4">
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <History className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="font-display text-lg font-bold text-foreground">Riwayat Prompt Saya</h2>
+                <p className="text-xs text-muted-foreground">Arsip seluruh prompt video UGC yang telah dibuat.</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-xl bg-secondary text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Banner Info Bebas Kuota */}
+          <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>Membuka, menyalin, atau mengunduh riwayat prompt lama <strong>100% GRATIS (0 Token)</strong>.</span>
+          </div>
+
+          {/* Search Input */}
+          <div className="mt-4 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Cari berdasarkan nama produk atau gaya video..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-10 rounded-xl bg-secondary/30 text-xs"
+            />
+          </div>
+        </div>
+
+        {/* Project List */}
+        <div className="my-4 flex-1 overflow-y-auto space-y-3.5 pr-1">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground text-xs gap-2">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <span>Memuat riwayat prompt dari database...</span>
+            </div>
+          ) : historyList.length > 0 ? (
+            historyList.map((item) => {
+              const productName = item.product_name || item.product_analysis?.product_name || "Produk UGC";
+              const dateStr = item.created_at ? new Date(item.created_at).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
+              const ugcStyle = item.video_settings?.ugc_style || item.generated_summary?.ugc_style || "UGC Style";
+              const duration = item.video_settings?.duration || item.generated_summary?.duration || "15s";
+
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-2xl border border-border/80 bg-background/80 p-4 shadow-sm transition-all hover:border-primary/50 hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <span className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary uppercase">
+                        {ugcStyle}
+                      </span>
+                      <h4 className="mt-1 font-display text-sm font-bold text-foreground">
+                        {productName}
+                      </h4>
+                      <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground font-mono">
+                        <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {dateStr}</span>
+                        <span>•</span>
+                        <span>{duration}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {item.generated_prompt && (
+                    <p className="mt-2.5 text-xs text-muted-foreground line-clamp-2 bg-secondary/30 p-2 rounded-lg font-mono text-[11px]">
+                      {item.generated_prompt}
+                    </p>
+                  )}
+
+                  <div className="mt-3.5 pt-3 border-t border-border/60 flex flex-wrap items-center justify-between gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => onSelectProject(item)}
+                      className="h-8 gap-1.5 rounded-lg text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      <span>Buka di Studio</span>
+                    </Button>
+
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => copyText(item.generated_prompt, "Prompt Master berhasil disalin!")}
+                        className="h-8 gap-1 rounded-lg text-xs"
+                      >
+                        <Copy className="h-3 w-3" />
+                        <span>Salin</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onDownloadTxt(item)}
+                        className="h-8 gap-1 rounded-lg text-xs"
+                        title="Unduh TXT"
+                      >
+                        <FileText className="h-3 w-3" />
+                        <span className="hidden sm:inline">TXT</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onDownloadPdf(item)}
+                        className="h-8 gap-1 rounded-lg text-xs"
+                        title="Unduh PDF"
+                      >
+                        <FileCheck className="h-3 w-3 text-primary" />
+                        <span className="hidden sm:inline">PDF</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border p-8 text-center text-muted-foreground text-xs">
+              <FolderOpen className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <p className="font-semibold text-foreground">Belum ada riwayat prompt.</p>
+              <p className="mt-1">Buat prompt video pertama Anda untuk menyimpan arsip otomatis di sini.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Drawer */}
+        <div className="pt-3 border-t border-border/80 flex items-center justify-between text-xs text-muted-foreground">
+          <span>Total Arsip: {historyList.length} Proyek</span>
+          <Button variant="outline" size="sm" onClick={onClose} className="h-8 rounded-lg">
+            Tutup
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -39,3 +39,15 @@ export async function adminAdjustCredits(payload) {
   });
   return data;
 }
+
+export async function getUserProjects(userId) {
+  try {
+    const { data } = await axios.get(`${API}/projects`, {
+      params: { user_id: userId }
+    });
+    return data;
+  } catch (e) {
+    return { success: false, projects: [] };
+  }
+}
+
