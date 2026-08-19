@@ -9,7 +9,11 @@ from pathlib import Path
 logger = logging.getLogger("storage_service")
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-UPLOAD_DIR = ROOT_DIR / "uploads"
+# In Vercel serverless functions, root filesystem is read-only, use /tmp/uploads
+if os.environ.get("VERCEL") or not os.access(ROOT_DIR, os.W_OK):
+    UPLOAD_DIR = Path("/tmp") / "uploads"
+else:
+    UPLOAD_DIR = ROOT_DIR / "uploads"
 
 MIME_TYPES = {
     "jpg": "image/jpeg",

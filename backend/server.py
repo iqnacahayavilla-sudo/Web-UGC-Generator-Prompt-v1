@@ -22,9 +22,10 @@ from services.ai_service import (
 from services.credit_service import CreditService, PLAN_CATALOG, TOPUP_PACKAGES
 from services.payment_service import PaymentService
 
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+db_name = os.environ.get('DB_NAME', 'ugc_prompt_studio')
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[db_name]
 
 credit_service = CreditService(db)
 payment_service = PaymentService(credit_service)
