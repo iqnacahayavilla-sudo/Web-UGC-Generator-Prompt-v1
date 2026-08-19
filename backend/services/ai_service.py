@@ -63,15 +63,32 @@ CANDIDATE_MODELS = [
 ]
 
 BASE_REST_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+OPENAI_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
 
 
-def _api_key() -> str:
+def _openai_api_key() -> str:
+    return (
+        os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("REACT_APP_OPENAI_API_KEY")
+        or ""
+    ).strip()
+
+
+def _openai_model() -> str:
+    return os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
+
+
+def _gemini_api_key() -> str:
     return (
         os.environ.get("GEMINI_API_KEY")
         or os.environ.get("GOOGLE_API_KEY")
         or os.environ.get("EMERGENT_LLM_KEY")
         or ""
     ).strip()
+
+
+def _api_key() -> str:
+    return _gemini_api_key()
 
 
 def _get_preferred_model() -> str:
@@ -458,6 +475,73 @@ def get_mock_generated_prompt(analysis: dict = None, video: dict = None, creator
     }
 
 
+def _call_openai_rest(model_name: str, api_key: str, system_instruction: str, prompt: str, image_bytes: bytes | None = None) -> dict:
+    """
+    Eksekusi langsung ke OpenAI Chat Completions REST API.
+    Mendukung gpt-4o-mini Vision, response_format json_object, dan system prompt.
+    """
+    messages = []
+    if system_instruction:
+        messages.append({"role": "system", "content": system_instruction})
+
+    if image_bytes:
+        img_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        user_content = [
+            {"type": "text", "text": prompt or "Analisis foto produk ini dan kembalikan format JSON sesuai instruksi."},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{img_b64}"
+                }
+            }
+        ]
+        messages.append({"role": "user", "content": user_content})
+    else:
+        messages.append({"role": "user", "content": prompt or ""})
+
+    payload = {
+        "model": model_name or "gpt-4o-mini",
+        "response_format": {"type": "json_object"},
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 4096
+    }
+
+    start_time = time.monotonic()
+    logger.info(f"[OPENAI REST CALL] Model: {model_name} | URL: {OPENAI_COMPLETIONS_URL}")
+
+    resp = requests.post(
+        OPENAI_COMPLETIONS_URL,
+        json=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        },
+        timeout=55
+    )
+    elapsed = round(time.monotonic() - start_time, 2)
+
+    if resp.status_code == 200:
+        res_json = resp.json()
+        choices = res_json.get("choices", [])
+        if not choices:
+            raise AIError(PROVIDER_ERROR, f"OpenAI returned 200 OK but no choices found: {res_json}")
+
+        raw_text = choices[0].get("message", {}).get("content", "")
+        print(f"\n[OPENAI REST SUCCESS - Model: {model_name} in {elapsed}s] Raw Response ({len(raw_text)} chars):\n{raw_text[:400]}...\n")
+        return _extract_json(raw_text)
+    else:
+        err_body = resp.text
+        classification = _classify(resp.status_code, err_body)
+        print(f"\n==================== [OPENAI REST ERROR DETAILS] ====================")
+        print(f"Model: {model_name}")
+        print(f"HTTP Status Code: {resp.status_code}")
+        print(f"Classification: {classification}")
+        print(f"Raw Error Response: {err_body}")
+        print(f"=====================================================================\n")
+        raise AIError(classification, f"OpenAI API Error {resp.status_code}: {err_body}", status=resp.status_code)
+
+
 def _call_gemini_rest(model_name: str, api_key: str, system_instruction: str, prompt: str, image_bytes: bytes | None = None) -> dict:
     """
     Eksekusi langsung ke Google Generative Language REST API.
@@ -524,13 +608,9 @@ def _call_gemini_rest(model_name: str, api_key: str, system_instruction: str, pr
 
 async def analyze_image_json(session_id: str, system: str, prompt: str, image_bytes: bytes) -> dict:
     """
-    Analisis gambar produk via Gemini REST API dengan fallback model multi-pool.
+    Analisis gambar produk via OpenAI (gpt-4o-mini Vision) sebagai engine utama,
+    dengan fallback ke Gemini REST API jika OpenAI tidak terkonfigurasi/error.
     """
-    api_key = _api_key()
-    if not api_key:
-        print("[AI WARNING] GEMINI_API_KEY tidak ditemukan pada environment variables.")
-        return get_mock_product_analysis("Produk Pilihan")
-
     # Pre-process image with Pillow to ensure clean JPEG byte stream
     try:
         pil_img = PIL.Image.open(io.BytesIO(image_bytes))
@@ -543,89 +623,108 @@ async def analyze_image_json(session_id: str, system: str, prompt: str, image_by
         logger.warning(f"Gagal memproses gambar dengan Pillow: {img_err}. Menggunakan raw bytes.")
         clean_bytes = image_bytes
 
-    preferred = _get_preferred_model()
-    models_to_try = [preferred] + [m for m in CANDIDATE_MODELS if m != preferred]
-
     loop = asyncio.get_event_loop()
-    last_err = None
 
-    for model_name in models_to_try:
+    # 1. Primary Engine: OpenAI GPT-4o-mini (Vision)
+    openai_key = _openai_api_key()
+    openai_model_name = _openai_model()
+    if openai_key:
         try:
-            logger.info(f"Mencoba analisis gambar produk dengan model: {model_name}...")
+            logger.info(f"Mencoba analisis gambar produk dengan OpenAI Vision: {openai_model_name}...")
             result = await loop.run_in_executor(
                 None,
-                lambda m=model_name: _call_gemini_rest(
-                    model_name=m,
-                    api_key=api_key,
+                lambda: _call_openai_rest(
+                    model_name=openai_model_name,
+                    api_key=openai_key,
                     system_instruction=system,
                     prompt=prompt,
                     image_bytes=clean_bytes
                 )
             )
-            print(f"\n[ANALISIS GAMBAR SUKSES] Berhasil menganalisis foto produk dengan model {model_name}!")
+            print(f"\n[ANALISIS GAMBAR SUKSES] Berhasil menganalisis foto produk dengan OpenAI {openai_model_name}!")
             return result
-        except AIError as exc:
-            last_err = exc
-            print(f"[VISION ERROR - Model: {model_name}] Status: {exc.status} | Details: {exc}")
-            is_model_unavailable = exc.status == 404 or "not found" in str(exc).lower()
-            is_rate_limited = exc.status == 429 or exc.classification == RATE_LIMITED
-            if is_model_unavailable or is_rate_limited:
-                continue
-            else:
-                break
-        except Exception as general_err:
-            last_err = general_err
-            print(f"[VISION GENERAL ERROR - Model: {model_name}] Error: {general_err}")
-            continue
+        except Exception as oai_err:
+            print(f"[OPENAI VISION ERROR] {oai_err}. Beralih ke fallback provider...")
 
-    print(f"\n[FALLBACK VISION ACTIVATED] Semua model API mengalami kendala ({last_err}). Mengembalikan data analisis produk cadangan.")
+    # 2. Fallback Engine: Google Gemini Multi-Pool
+    gemini_key = _gemini_api_key()
+    if gemini_key:
+        preferred = _get_preferred_model()
+        models_to_try = [preferred] + [m for m in CANDIDATE_MODELS if m != preferred]
+
+        for model_name in models_to_try:
+            try:
+                logger.info(f"Mencoba analisis gambar produk dengan Gemini: {model_name}...")
+                result = await loop.run_in_executor(
+                    None,
+                    lambda m=model_name: _call_gemini_rest(
+                        model_name=m,
+                        api_key=gemini_key,
+                        system_instruction=system,
+                        prompt=prompt,
+                        image_bytes=clean_bytes
+                    )
+                )
+                print(f"\n[ANALISIS GAMBAR SUKSES] Berhasil menganalisis foto produk dengan Gemini {model_name}!")
+                return result
+            except Exception as gemini_err:
+                print(f"[GEMINI VISION ERROR - Model: {model_name}] {gemini_err}")
+                continue
+
+    print(f"\n[FALLBACK VISION ACTIVATED] Semua provider API mengalami kendala. Mengembalikan data analisis produk cadangan.")
     return get_mock_product_analysis("Produk Pilihan")
 
 
 async def generate_json(session_id: str, system: str, prompt: str, analysis_context: dict = None, video_context: dict = None, creator_context: dict = None, language_context: str = "Bahasa Indonesia") -> dict:
     """
-    Menghasilkan prompt UGC via Gemini REST API.
-    Jika API berhasil, langsung mengembalikan prompt buatan AI asli.
-    Jika semua model gagal, mengembalikan prompt UGC dinamis yang disesuaikan dengan data nyata user.
+    Menghasilkan prompt UGC via OpenAI (gpt-4o-mini) sebagai engine utama,
+    dengan fallback ke Google Gemini dan dynamic template.
     """
-    api_key = _api_key()
-    if not api_key:
-        print("[AI WARNING] GEMINI_API_KEY tidak ditemukan pada environment variables.")
-        return get_mock_generated_prompt(analysis_context, video_context, creator_context, language_context)
-
-    preferred = _get_preferred_model()
-    models_to_try = [preferred] + [m for m in CANDIDATE_MODELS if m != preferred]
-
     loop = asyncio.get_event_loop()
-    last_err = None
 
-    for model_name in models_to_try:
+    # 1. Primary Engine: OpenAI GPT-4o-mini
+    openai_key = _openai_api_key()
+    openai_model_name = _openai_model()
+    if openai_key:
         try:
-            logger.info(f"Membuat prompt video UGC dengan model: {model_name}...")
+            logger.info(f"Membuat prompt video UGC dengan OpenAI: {openai_model_name}...")
             result = await loop.run_in_executor(
                 None,
-                lambda m=model_name: _call_gemini_rest(
-                    model_name=m,
-                    api_key=api_key,
+                lambda: _call_openai_rest(
+                    model_name=openai_model_name,
+                    api_key=openai_key,
                     system_instruction=system,
                     prompt=prompt
                 )
             )
-            print(f"\n[GENERATE PROMPT SUKSES] Berhasil menghasilkan prompt AI asli menggunakan model {model_name}!")
+            print(f"\n[GENERATE PROMPT SUKSES] Berhasil menghasilkan prompt AI asli menggunakan OpenAI {openai_model_name}!")
             return result
-        except AIError as exc:
-            last_err = exc
-            print(f"[GENERATE PROMPT ERROR - Model: {model_name}] Status: {exc.status} | Details: {exc}")
-            is_model_unavailable = exc.status == 404 or "not found" in str(exc).lower()
-            is_rate_limited = exc.status == 429 or exc.classification == RATE_LIMITED
-            if is_model_unavailable or is_rate_limited:
-                continue
-            else:
-                break
-        except Exception as general_err:
-            last_err = general_err
-            print(f"[GENERATE GENERAL ERROR - Model: {model_name}] Error: {general_err}")
-            continue
+        except Exception as oai_err:
+            print(f"[OPENAI GENERATE ERROR] {oai_err}. Beralih ke fallback provider...")
 
-    print(f"\n[FALLBACK PROMPT ACTIVATED] Seluruh model API mengalami kendala ({last_err}). Mengembalikan prompt dinamis berbasis data produk nyata.")
+    # 2. Fallback Engine: Google Gemini Multi-Pool
+    gemini_key = _gemini_api_key()
+    if gemini_key:
+        preferred = _get_preferred_model()
+        models_to_try = [preferred] + [m for m in CANDIDATE_MODELS if m != preferred]
+
+        for model_name in models_to_try:
+            try:
+                logger.info(f"Membuat prompt video UGC dengan Gemini: {model_name}...")
+                result = await loop.run_in_executor(
+                    None,
+                    lambda m=model_name: _call_gemini_rest(
+                        model_name=m,
+                        api_key=gemini_key,
+                        system_instruction=system,
+                        prompt=prompt
+                    )
+                )
+                print(f"\n[GENERATE PROMPT SUKSES] Berhasil menghasilkan prompt AI asli menggunakan Gemini {model_name}!")
+                return result
+            except Exception as gemini_err:
+                print(f"[GEMINI GENERATE ERROR - Model: {model_name}] {gemini_err}")
+                continue
+
+    print(f"\n[FALLBACK PROMPT ACTIVATED] Seluruh model API mengalami kendala. Mengembalikan prompt dinamis berbasis data produk nyata.")
     return get_mock_generated_prompt(analysis_context, video_context, creator_context, language_context)
