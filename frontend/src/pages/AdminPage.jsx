@@ -66,13 +66,31 @@ export default function AdminPage() {
     setFormData((prev) => ({ ...prev, password: pass }));
   };
 
-  // Fetch Member List directly from Supabase
+  // Fetch Member List directly from Supabase profiles table
   const fetchMembers = React.useCallback(async () => {
     setLoadingMembers(true);
     try {
-      const data = await getMembersListByAdmin(100);
-      if (data?.success) {
-        setMembers(data.users || []);
+      // 1. Panggil query langsung menggunakan supabaseAdmin (Service Role / Public)
+      const { data, error } = await supabaseAdmin
+        .from("profiles")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        setMembers(data);
+        return;
+      }
+
+      if (error) {
+        console.warn("supabaseAdmin profiles query notice:", error.message);
+      }
+
+      // 2. Fallback jika supabaseAdmin query perlu helper
+      const res = await getMembersListByAdmin(100);
+      if (res?.success && Array.isArray(res.users) && res.users.length > 0) {
+        setMembers(res.users);
+      } else if (Array.isArray(data)) {
+        setMembers(data);
       }
     } catch (e) {
       console.warn("Gagal memuat daftar member:", e);

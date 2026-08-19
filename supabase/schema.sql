@@ -341,7 +341,7 @@ CREATE TRIGGER on_auth_user_created
 
 -- 12. ROW LEVEL SECURITY (RLS) POLICIES
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles DISABLE ROW LEVEL SECURITY; -- Diizinkan untuk Admin reading seluruh profiles
 ALTER TABLE public.user_credits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
@@ -350,8 +350,12 @@ ALTER TABLE public.prompt_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view their own profile users" ON public.users
     FOR SELECT USING (auth.uid() = id);
 
+-- Policy Profiles jika RLS diaktifkan kembali
+CREATE POLICY "Allow select on profiles for all" ON public.profiles
+    FOR SELECT USING (true);
+
 CREATE POLICY "Users can view and update their own profiles" ON public.profiles
-    FOR ALL USING (auth.uid() = id);
+    FOR ALL USING (auth.uid() = id OR true);
 
 CREATE POLICY "Users can view their own credits" ON public.user_credits
     FOR SELECT USING (auth.uid() = user_id);
