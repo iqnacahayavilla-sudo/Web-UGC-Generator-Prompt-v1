@@ -5,14 +5,18 @@ import { useCredits } from "@/context/CreditContext";
 import { Button } from "@/components/ui/button";
 
 export const UserMenu = () => {
-  const { user, logout } = useAuth();
+  const { user, profile, logout } = useAuth();
   const { totalCredits, planType, openPricingModal } = useCredits();
   const [isOpen, setIsOpen] = useState(false);
 
   if (!user) return null;
 
-  const fullName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Kreator";
-  const avatarUrl = user.user_metadata?.avatar_url;
+  const fullName =
+    profile?.full_name ||
+    user.user_metadata?.full_name ||
+    user.email?.split("@")[0] ||
+    "Kreator Sinergi";
+  const avatarUrl = profile?.avatar_url || user.user_metadata?.avatar_url;
   const initial = fullName.charAt(0).toUpperCase();
 
   const planLabels = {

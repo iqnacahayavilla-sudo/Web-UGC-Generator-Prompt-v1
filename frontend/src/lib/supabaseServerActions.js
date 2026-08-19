@@ -1,7 +1,8 @@
 /**
- * Sinergi Visual UGC Generator Prompt — Next.js Server Actions / Supabase Service
- * Modul ini menyediakan fungsi Server Actions & Client Service untuk manajemen kredit dan transaksi token.
+ * Sinergi Visual UGC Generator Prompt — Supabase Server Actions & Client Service
+ * Modul sinkronisasi profil, kuota kredit harian, bonus sambutan, dan transaksi token.
  */
+import { supabase, isSupabaseConfigured } from "./supabaseClient";
 
 // Konfigurasi kuota paket harian
 export const PLAN_QUOTAS = {
@@ -18,11 +19,91 @@ export function getTodayWIB() {
 }
 
 /**
- * Server Action: Ambil Saldo Kredit User
+ * Server Action: Ambil Saldo Kredit User langsung dari Supabase Database (atau Backend / Local Storage)
  */
 export async function getUserCreditsAction(userId = "guest-user") {
+  const today = getTodayWIB();
+
+  // 1. Jika Supabase aktif, prioritaskan query database Supabase
+  if (isSupabaseConfigured && supabase && userId && userId !== "guest-user") {
+    try {
+      let { data: credits, error } = await supabase
+        .from("user_credits")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      let planType = "free";
+      const { data: userProfile } = await supabase
+        .from("users")
+        .select("plan_type, full_name, email")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (userProfile?.plan_type) {
+        planType = userProfile.plan_type;
+      }
+
+      const quota = PLAN_QUOTAS[planType]?.daily || 100;
+
+      // Jika belum ada row user_credits, inisialisasi dengan 100 daily + 10 bonus
+      if (!credits) {
+        const newRecord = {
+          user_id: userId,
+          daily_quota: quota,
+          daily_credits_remaining: quota,
+          bonus_credits: 10,
+          last_reset_date: today,
+        };
+
+        const { data: inserted } = await supabase
+          .from("user_credits")
+          .insert(newRecord)
+          .select()
+          .single();
+
+        credits = inserted || newRecord;
+      } else if (credits.last_reset_date !== today) {
+        // Auto reset harian 00:00 WIB
+        const { data: updated } = await supabase
+          .from("user_credits")
+          .update({
+            daily_quota: quota,
+            daily_credits_remaining: quota,
+            last_reset_date: today,
+          })
+          .eq("user_id", userId)
+          .select()
+          .single();
+
+        credits = updated || {
+          ...credits,
+          daily_quota: quota,
+          daily_credits_remaining: quota,
+          last_reset_date: today,
+        };
+      }
+
+      const dailyRemaining = credits.daily_credits_remaining ?? quota;
+      const bonusCredits = credits.bonus_credits ?? 0;
+
+      return {
+        success: true,
+        user_id: userId,
+        plan_type: planType,
+        daily_quota: quota,
+        daily_credits_remaining: dailyRemaining,
+        bonus_credits: bonusCredits,
+        total_credits: dailyRemaining + bonusCredits,
+        last_reset_date: credits.last_reset_date || today,
+      };
+    } catch (dbErr) {
+      console.warn("Supabase direct query notice:", dbErr);
+    }
+  }
+
+  // 2. Coba panggil API backend lokal / Next.js API
   try {
-    // 1. Coba panggil API backend lokal / Next.js API
     const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:8001";
     const res = await fetch(`${backendUrl}/api/credits?user_id=${encodeURIComponent(userId)}`);
     if (res.ok) {
@@ -32,8 +113,7 @@ export async function getUserCreditsAction(userId = "guest-user") {
     console.warn("Backend credits API unreachable, using local fallback state:", e);
   }
 
-  // 2. Fallback Client/Local State (dengan persistensi localStorage)
-  const today = getTodayWIB();
+  // 3. Fallback Client/Local State (dengan persistensi localStorage)
   let stored = null;
   try {
     const raw = localStorage.getItem(`sinergi_credits_${userId}`);
@@ -78,6 +158,26 @@ export async function consumeCreditsAction({
   promptResult = null,
   modelUsed = "gemini-flash",
 }) {
+  // 1. Jika Supabase aktif, coba panggil RPC consume_user_credits
+  if (isSupabaseConfigured && supabase && userId && userId !== "guest-user") {
+    try {
+      const { data, error } = await supabase.rpc("consume_user_credits", {
+        p_user_id: userId,
+        p_tokens: tokens,
+        p_category: category,
+        p_prompt_result: typeof promptResult === "string" ? promptResult : JSON.stringify(promptResult),
+        p_model_used: modelUsed,
+      });
+
+      if (!error && data?.success) {
+        return data;
+      }
+    } catch (rpcErr) {
+      console.warn("Supabase RPC consume warning:", rpcErr);
+    }
+  }
+
+  // 2. Coba panggil Backend API
   try {
     const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:8001";
     const res = await fetch(`${backendUrl}/api/credits/consume`, {
@@ -106,7 +206,7 @@ export async function consumeCreditsAction({
     console.warn("Backend consume API unreachable, performing local deduction:", e);
   }
 
-  // Local fallback deduction
+  // 3. Local fallback deduction
   const current = await getUserCreditsAction(userId);
   const total = current.daily_credits_remaining + current.bonus_credits;
 
@@ -168,6 +268,26 @@ export async function topupCreditsAction({
   pricePaid = 0,
   paymentRef = `INV-${Date.now()}`,
 }) {
+  // 1. Jika Supabase aktif, coba panggil RPC topup_user_credits
+  if (isSupabaseConfigured && supabase && userId && userId !== "guest-user") {
+    try {
+      const { data, error } = await supabase.rpc("topup_user_credits", {
+        p_user_id: userId,
+        p_bonus_tokens: bonusTokens,
+        p_new_plan: newPlan,
+        p_price_paid: pricePaid,
+        p_payment_ref: paymentRef,
+      });
+
+      if (!error && data?.success) {
+        return data;
+      }
+    } catch (rpcErr) {
+      console.warn("Supabase RPC topup warning:", rpcErr);
+    }
+  }
+
+  // 2. Coba panggil Backend API
   try {
     const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:8001";
     const res = await fetch(`${backendUrl}/api/credits/topup`, {
@@ -188,7 +308,7 @@ export async function topupCreditsAction({
     console.warn("Backend topup API unreachable, performing local update:", e);
   }
 
-  // Local fallback update
+  // 3. Local fallback update
   const current = await getUserCreditsAction(userId);
   let quota = current.daily_quota;
   let dailyRem = current.daily_credits_remaining;
