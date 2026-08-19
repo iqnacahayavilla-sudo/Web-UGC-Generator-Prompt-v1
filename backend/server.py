@@ -293,11 +293,15 @@ async def analyze_product(
     request: Request = None
 ):
     """
-    Menganalisis foto produk via OpenAI GPT-4o-mini Vision (dengan fallback Gemini).
+    Menganalisis foto produk via OpenAI GPT-4o-mini Vision.
     Mendukung upload file multipart/form-data dan JSON payload base64.
     """
+    req_path = request.url.path if request else "/api/analyze"
+    req_method = request.method if request else "POST"
+    logger.info(f"[API ANALYZE] method={req_method} path={req_path} has_file={bool(file)}")
     data = None
     ext = "jpg"
+
 
     # 1. Coba baca dari multipart file
     if file is not None:

@@ -1,8 +1,8 @@
 import axios from "axios";
 
 // Always use relative /api path for clean Vercel Serverless Function routing
-const BACKEND_URL = (process.env.REACT_APP_BACKEND_URL || "").trim().replace(/\/$/, "");
-const API = BACKEND_URL && !BACKEND_URL.includes("localhost") ? `${BACKEND_URL}/api` : "/api";
+const API = "/api";
+
 
 export const fileUrl = (path) => `${API}/files/${path}`;
 
