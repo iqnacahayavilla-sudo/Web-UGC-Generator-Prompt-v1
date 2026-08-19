@@ -218,17 +218,11 @@ export const AuthProvider = ({ children }) => {
   const loginWithGoogle = async () => {
     setIsLoading(true);
     try {
-      const { data, error, simulated } = await signInWithGoogle();
+      const { data, error } = await signInWithGoogle();
       if (error) throw error;
-
-      if (simulated && data?.user) {
-        setUser(data.user);
-        await loadProfile(data.user);
-        toast.success(`Selamat datang, ${data.user.user_metadata?.full_name || "Kreator"}!`);
-        closeAuthModal();
-      }
+      // Supabase OAuth otomatis mengalihkan browser ke halaman autentikasi Google
     } catch (e) {
-      toast.error(e.message || "Gagal login dengan Google.");
+      toast.error(e.message || "Gagal membuka halaman login Google.");
     } finally {
       setIsLoading(false);
     }

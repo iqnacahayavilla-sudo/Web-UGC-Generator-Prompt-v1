@@ -119,29 +119,23 @@ export async function signInWithEmailPassword({ email, password }) {
 }
 
 /**
- * Login dengan Google OAuth via Supabase
+ * Login dengan Google OAuth via Supabase (OAuth Asli)
  */
 export async function signInWithGoogle() {
-  if (!isSupabaseConfigured || !supabase) {
-    const simulatedUser = {
-      id: `usr_${Date.now()}`,
-      email: "kreator.sinergi@gmail.com",
-      user_metadata: {
-        full_name: "Kreator Sinergi",
-        avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-      },
-      plan_type: "free",
-    };
-    try {
-      localStorage.setItem("sinergi_auth_user", JSON.stringify(simulatedUser));
-    } catch (e) {}
-    return { data: { user: simulatedUser, session: { user: simulatedUser } }, error: null, simulated: true };
+  if (!supabase) {
+    const errorMsg = "Supabase client belum aktif. Pastikan REACT_APP_SUPABASE_URL dan REACT_APP_SUPABASE_ANON_KEY telah dikonfigurasi.";
+    console.error(errorMsg);
+    return { data: null, error: new Error(errorMsg) };
   }
+
+  // Gunakan origin halaman dinamis browser tanpa hardcode localhost (misal: https://web-ugc-generator-prompt-v1-omega.vercel.app/)
+  const redirectOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const redirectTo = `${redirectOrigin}/`;
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${window.location.origin}/`,
+      redirectTo,
       queryParams: {
         access_type: "offline",
         prompt: "consent",
@@ -149,7 +143,7 @@ export async function signInWithGoogle() {
     },
   });
 
-  return { data, error, simulated: false };
+  return { data, error };
 }
 
 /**
