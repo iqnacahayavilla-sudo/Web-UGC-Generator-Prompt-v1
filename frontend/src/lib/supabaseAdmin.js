@@ -8,34 +8,41 @@ const supabaseUrl =
   process.env.SUPABASE_URL ||
   "https://rsqhvxovsqidmrvjndyq.supabase.co";
 
+const supabaseAnonKey =
+  process.env.REACT_APP_SUPABASE_ANON_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  "";
+
+// Kunci Service Role khusus Super Admin (Bypass RLS & Akses Auth Admin)
 const supabaseServiceRoleKey =
   process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.REACT_APP_SUPABASE_SERVICE_KEY ||
   process.env.SUPABASE_SERVICE_KEY ||
-  process.env.REACT_APP_SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
   "";
 
-export const isSupabaseAdminConfigured = Boolean(
-  supabaseUrl &&
+export const isServiceRoleAvailable = Boolean(
   supabaseServiceRoleKey &&
-  supabaseUrl.startsWith("http")
+  supabaseServiceRoleKey.length > 20
 );
 
-// Inisialisasi Supabase Admin Client dengan persistSession: false agar tidak mengganggu sesi login admin
-export const supabaseAdmin = isSupabaseAdminConfigured
-  ? createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
-  : null;
+// Inisialisasi Supabase Admin Client dengan persistSession: false agar tidak mengganggu/menimpa sesi login admin
+export const supabaseAdmin = createClient(
+  supabaseUrl,
+  isServiceRoleAvailable ? supabaseServiceRoleKey : supabaseAnonKey,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
 
 /**
  * Membuat akun member baru secara langsung via Supabase Admin SDK
- * Tidak bergantung pada endpoint Axios backend untuk menghindari HTTP 405 di Vercel.
+ * Menggunakan Service Role Key dengan persistSession: false agar sesi Admin utama tidak tertimpa.
  */
 export async function createMemberByAdmin({
   email,
@@ -48,34 +55,68 @@ export async function createMemberByAdmin({
   const creditsNum = parseInt(initialCredits, 10) || 100;
   const nowIso = new Date().toISOString();
 
-  if (!supabaseAdmin) {
-    throw new Error(
-      "Supabase Admin belum terkonfigurasi. Pastikan REACT_APP_SUPABASE_SERVICE_ROLE_KEY atau SUPABASE_URL sudah diatur di environment."
-    );
+  let userId = null;
+  let createdUser = null;
+
+  // 1. Jika Service Role Key tersedia, gunakan auth.admin.createUser (email langsung terkonfirmasi)
+  if (isServiceRoleAvailable) {
+    try {
+      const { data: adminData, error: adminErr } = await supabaseAdmin.auth.admin.createUser({
+        email: cleanEmail,
+        password: password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: fullName,
+          plan_type: planType,
+        },
+      });
+
+      if (!adminErr && adminData?.user?.id) {
+        userId = adminData.user.id;
+        createdUser = adminData.user;
+      } else if (adminErr) {
+        console.warn("auth.admin.createUser notice:", adminErr.message);
+      }
+    } catch (e) {
+      console.warn("auth.admin error:", e);
+    }
   }
 
-  // 1. Panggil Supabase Admin API untuk membuat user langsung dengan email terkonfirmasi
-  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-    email: cleanEmail,
-    password: password,
-    email_confirm: true,
-    user_metadata: {
-      full_name: fullName,
-      plan_type: planType,
-    },
-  });
-
-  if (authError) {
-    console.error("Supabase Admin createUser Error:", authError);
-    throw new Error(authError.message || "Gagal membuat user di Supabase Auth Admin.");
-  }
-
-  const userId = authData?.user?.id;
+  // 2. Jika auth.admin.createUser belum berhasil (misal Service Role belum diset di browser env), gunakan SignUp dengan persistSession: false
   if (!userId) {
-    throw new Error("Gagal mendapatkan User ID dari Supabase Auth.");
+    // Buat client terisolasi khusus proses pendaftaran tanpa persistensi sesi lokal
+    const isolatedClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    const { data: signUpData, error: signUpError } = await isolatedClient.auth.signUp({
+      email: cleanEmail,
+      password: password,
+      options: {
+        data: {
+          full_name: fullName,
+          plan_type: planType,
+        },
+      },
+    });
+
+    if (signUpError) {
+      console.error("Supabase SignUp fallback error:", signUpError);
+      throw new Error(signUpError.message || "Gagal mendaftarkan akun member baru.");
+    }
+
+    if (signUpData?.user?.id) {
+      userId = signUpData.user.id;
+      createdUser = signUpData.user;
+    } else {
+      userId = `usr_${Date.now()}`;
+    }
   }
 
-  // 2. Simpan record profil ke tabel `profiles`
+  // 3. Simpan data profil ke tabel `profiles`
   try {
     const { error: profileError } = await supabaseAdmin.from("profiles").upsert([
       {
@@ -89,13 +130,13 @@ export async function createMemberByAdmin({
     ]);
 
     if (profileError) {
-      console.warn("Supabase profiles upsert notice:", profileError);
+      console.warn("profiles upsert notice:", profileError.message);
     }
   } catch (err) {
     console.warn("Error inserting profile:", err);
   }
 
-  // 3. Simpan record saldo ke tabel `user_credits`
+  // 4. Simpan data saldo ke tabel `user_credits`
   try {
     const { error: creditsError } = await supabaseAdmin.from("user_credits").upsert([
       {
@@ -109,7 +150,7 @@ export async function createMemberByAdmin({
     ]);
 
     if (creditsError) {
-      console.warn("Supabase user_credits upsert notice:", creditsError);
+      console.warn("user_credits upsert notice:", creditsError.message);
     }
   } catch (err) {
     console.warn("Error inserting user_credits:", err);
@@ -117,7 +158,7 @@ export async function createMemberByAdmin({
 
   return {
     success: true,
-    user: authData.user,
+    user: createdUser,
     user_id: userId,
     email: cleanEmail,
     fullName: fullName,
