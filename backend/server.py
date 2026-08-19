@@ -24,7 +24,7 @@ from services.payment_service import PaymentService
 from services.supabase_service import SupabaseService, GENERATE_CREDIT_COST
 
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
-db_name = os.environ.get('DB_NAME', 'ugc_prompt_studio')
+db_name = os.environ.get('MONGO_DB_NAME') or os.environ.get('DB_NAME', 'ugc_prompt_studio')
 client = AsyncIOMotorClient(mongo_url)
 db = client[db_name]
 
@@ -52,6 +52,40 @@ MAX_SIZE = 10 * 1024 * 1024  # 10 MB
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+
+async def log_generation_activity(
+    user_id: str,
+    project_id: str,
+    status: str,
+    product_name: Optional[str] = None,
+    duration: Optional[str] = None,
+    credits_deducted: int = 0,
+    error_message: Optional[str] = None,
+    timestamp: Optional[str] = None
+):
+    """
+    Mencatat log setiap kali ada aktivitas generate prompt (user_id, status, timestamp) ke koleksi generation_logs MongoDB.
+    """
+    now_str = timestamp or now_iso()
+    log_doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "project_id": project_id,
+        "status": status,
+        "product_name": product_name or "Produk Unggulan",
+        "duration": duration,
+        "credits_deducted": credits_deducted,
+        "error_message": error_message,
+        "timestamp": now_str,
+        "created_at": now_str,
+    }
+    try:
+        if db is not None:
+            await db.generation_logs.insert_one(log_doc)
+            logger.info(f"[LOG GENERATION] user_id={user_id}, status={status}, project_id={project_id}")
+    except Exception as log_err:
+        logger.warning(f"Failed to insert into generation_logs: {log_err}")
 
 
 # Map an AI error classification to (http_status, user_message).
@@ -136,6 +170,13 @@ async def startup():
         logger.info("Object storage initialized")
     except Exception as e:
         logger.error(f"Storage init failed: {e}")
+
+    try:
+        await client.admin.command('ping')
+        logger.info(f"MongoDB connection established successfully at {mongo_url}, database: {db_name}")
+        safe_print(f"[MONGODB CONNECTED] Database: {db_name}")
+    except Exception as mongo_err:
+        logger.warning(f"MongoDB ping connection notice: {mongo_err}")
 
 
 @api_router.get("/")
@@ -318,6 +359,16 @@ async def generate_prompt(project_id: str, req: GenerateRequest):
     try:
         is_enough, total_credits, user_info = await supabase_service.check_user_credits(user_id, required_credits=credit_cost)
         if not is_enough:
+            # Catat log aktivitas gagal karena kredit tidak mencukupi
+            await log_generation_activity(
+                user_id=user_id,
+                project_id=project_id,
+                status="insufficient_credits",
+                product_name=req.product_analysis.get("product_name"),
+                duration=req.video_settings.duration,
+                credits_deducted=0,
+                error_message=f"Kredit tidak cukup. Dibutuhkan {credit_cost} credits, saldo tersedia: {total_credits}."
+            )
             raise HTTPException(
                 status_code=403,
                 detail={
@@ -389,6 +440,20 @@ async def generate_prompt(project_id: str, req: GenerateRequest):
     except Exception as save_err:
         logger.warning(f"Project save warning: {save_err}")
 
+    # 5. Catat log aktivitas berhasil generate prompt ke koleksi generation_logs di MongoDB
+    try:
+        await log_generation_activity(
+            user_id=user_id,
+            project_id=project_id,
+            status="success",
+            product_name=req.product_analysis.get("product_name"),
+            duration=req.video_settings.duration,
+            credits_deducted=credit_cost,
+            error_message=None
+        )
+    except Exception as log_act_err:
+        logger.warning(f"Generation activity logging warning: {log_act_err}")
+
     return result
 
 
@@ -411,6 +476,19 @@ async def get_project(project_id: str):
 async def get_user_history(user_id: str = Query("guest-user"), limit: int = Query(50)):
     """Mengambil riwayat proyek dan prompt yang pernah di-generate oleh user."""
     return await supabase_service.get_user_projects_history(user_id=user_id, limit=limit)
+
+
+# ---------- Generation Activity Logs Endpoint ----------
+@api_router.get("/logs/generation")
+async def get_generation_logs(user_id: Optional[str] = Query(None), limit: int = Query(50)):
+    """Mengambil riwayat log aktivitas pembuatan prompt dari koleksi generation_logs MongoDB."""
+    try:
+        query = {"user_id": user_id} if user_id and user_id != "all" else {}
+        cursor = db.generation_logs.find(query, {"_id": 0}).sort("timestamp", -1).limit(limit)
+        logs = await cursor.to_list(length=limit)
+        return {"success": True, "count": len(logs), "logs": logs}
+    except Exception as err:
+        return {"success": False, "count": 0, "logs": [], "error": str(err)}
 
 
 app.include_router(api_router)
