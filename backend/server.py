@@ -282,30 +282,66 @@ async def simulate_payment_success(req: TopupCreditRequest):
 
 
 # ---------- Image upload + analysis ----------
+@app.post("/api/analyze")
+@app.post("/api/analyze-image")
+@app.post("/analyze")
+@app.post("/analyze-image")
 @api_router.post("/analyze")
-async def analyze_product(file: UploadFile = File(...)):
-    ext = (file.filename.rsplit(".", 1)[-1] if "." in (file.filename or "") else "").lower()
-    if ext not in ALLOWED_EXT:
-        raise HTTPException(status_code=400, detail="Format foto belum didukung. Gunakan JPG, JPEG, PNG, atau WEBP.")
+@api_router.post("/analyze-image")
+async def analyze_product(
+    file: Optional[UploadFile] = File(None),
+    request: Request = None
+):
+    """
+    Menganalisis foto produk via OpenAI GPT-4o-mini Vision (dengan fallback Gemini).
+    Mendukung upload file multipart/form-data dan JSON payload base64.
+    """
+    data = None
+    ext = "jpg"
 
-    data = await file.read()
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail="File yang diupload kosong.")
+    # 1. Coba baca dari multipart file
+    if file is not None:
+        filename = file.filename or "product.jpg"
+        ext = (filename.rsplit(".", 1)[-1] if "." in filename else "jpg").lower()
+        if ext not in ALLOWED_EXT:
+            ext = "jpg"
+        data = await file.read()
+
+    # 2. Jika bukan multipart file, coba baca dari JSON payload (base64 data URL)
+    if (not data or len(data) == 0) and request is not None:
+        try:
+            body = await request.json()
+            raw_b64 = body.get("image_base64") or body.get("image") or body.get("file") or ""
+            if raw_b64:
+                if "," in raw_b64:
+                    header, raw_b64 = raw_b64.split(",", 1)
+                    if "png" in header:
+                        ext = "png"
+                    elif "webp" in header:
+                        ext = "webp"
+                data = base64.b64decode(raw_b64)
+        except Exception:
+            pass
+
+    # 3. Validasi isi file
+    if not data or len(data) == 0:
+        raise HTTPException(status_code=400, detail="File foto tidak ditemukan atau kosong.")
+
     if len(data) > MAX_SIZE:
-        raise HTTPException(status_code=400, detail="Ukuran foto terlalu besar. Silakan gunakan foto dengan ukuran lebih kecil.")
+        raise HTTPException(status_code=400, detail="Ukuran foto terlalu besar. Maksimal 10 MB.")
 
     try:
         upload = storage_service.upload_product_image(data, ext)
     except Exception as e:
-        logger.warning(f"Image upload disk write warning: {e}. Using virtual path fallback.")
+        logger.warning(f"Image upload disk write notice: {e}. Menggunakan virtual path.")
         upload = {"path": f"{uuid.uuid4()}.{ext}", "content_type": f"image/{ext}"}
 
     project_id = str(uuid.uuid4())
     try:
         analysis = await product_analysis.analyze(project_id, data)
     except Exception as e:
-        logger.warning(f"Image analysis exception in /api/analyze: {e}. Activating mock fallback.")
-        analysis = ai_service.get_mock_product_analysis()
+        logger.error(f"Image analysis error in /api/analyze: {e}")
+        analysis = ai_service.get_mock_product_analysis("Produk Pilihan")
 
     safe_print("\n==================== [SERVER LOG - PRODUCT ANALYSIS RESULT] ====================")
     safe_print(f"Project ID: {project_id}")
@@ -329,7 +365,11 @@ async def analyze_product(file: UploadFile = File(...)):
         "created_at": now_iso(),
         "updated_at": now_iso(),
     }
-    await db.projects.insert_one({**project})
+    if db is not None:
+        try:
+            await db.projects.insert_one({**project})
+        except Exception as db_err:
+            logger.warning(f"DB project insert notice: {db_err}")
 
     return {
         "project_id": project_id,
@@ -339,6 +379,8 @@ async def analyze_product(file: UploadFile = File(...)):
 
 
 # ---------- Serve stored images ----------
+@app.get("/api/files/{path:path}")
+@app.get("/files/{path:path}")
 @api_router.get("/files/{path:path}")
 async def serve_file(path: str):
     try:
@@ -350,15 +392,24 @@ async def serve_file(path: str):
 
 
 # ---------- Generate prompt with Supabase Credit Validation & Project Saving ----------
+@app.post("/api/projects/{project_id}/generate")
+@app.post("/api/generate")
+@app.post("/projects/{project_id}/generate")
+@app.post("/generate")
 @api_router.post("/projects/{project_id}/generate")
-async def generate_prompt(project_id: str, req: GenerateRequest):
+@api_router.post("/generate")
+async def generate_prompt(
+    req: GenerateRequest,
+    project_id: str = "proj-default"
+):
     user_id = req.user_id or "guest-user"
     credit_cost = 10  # 10 credits per prompt generation
 
-    # 1. Validasi tegas sebelum proses AI berjalan: if user_credits < 10: raise HTTPException(status_code=403, detail="Kredit tidak mencukupi untuk melakukan generate prompt.")
+    # 1. Validasi saldo kredit sebelum proses AI berjalan
     try:
         is_enough, total_credits, user_info = await supabase_service.check_user_credits(user_id, required_credits=credit_cost)
         user_credits = total_credits
+
 
         if user_credits < 10:
             # Catat log aktivitas gagal karena kredit tidak mencukupi ke MongoDB
