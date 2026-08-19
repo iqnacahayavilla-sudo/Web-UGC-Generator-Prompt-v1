@@ -397,18 +397,18 @@ export default function Studio() {
       toast.error(`Analisis AI: ${errMsg}. Silakan periksa atau sesuaikan detail produk di bawah.`);
       setProjectId(`proj_${Date.now()}`);
       setAnalysis({
-        product_name: "Tumbler / Botol Minum Estetik",
-        category: "Home & Lifestyle",
-        product_type: "Insulated Tumbler / Botol Minum",
+        product_name: "",
+        category: "",
+        product_type: "",
         brand: "",
-        dominant_colors: ["Neutral Aesthetic"],
-        materials: ["Stainless Steel / High Quality Material"],
-        packaging_description: "Bodi tumbler modern dengan pegangan dan tutup praktis.",
-        visual_features: ["Desain ergonomis", "Tutup anti-tumpah", "Finishing estetik"],
-        likely_use_case: "Menjaga suhu minuman panas atau dingin sepanjang hari",
-        target_audience: "Pria & Wanita aktif, pekerja kantoran, mahasiswa, dan kreator",
+        dominant_colors: [],
+        materials: [],
+        packaging_description: "",
+        visual_features: [],
+        likely_use_case: "",
+        target_audience: "",
         visible_text: "",
-        product_positioning: "Aesthetic, Viral & Fungsional",
+        product_positioning: "",
       });
     } finally {
       setAnalyzing(false);
