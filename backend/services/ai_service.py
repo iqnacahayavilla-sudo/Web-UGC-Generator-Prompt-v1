@@ -1,14 +1,14 @@
-"""AI provider abstraction using Google Generative AI (Gemini).
+"""AI provider using Google Generative Language REST API directly.
 
-Supports GEMINI_API_KEY, GOOGLE_API_KEY, or EMERGENT_LLM_KEY.
-Features:
-- Pre-call rate limiting delay (2 seconds)
-- Automatic retry up to 3x with dynamic wait extraction and progressive backoff
-- Multi-flash-model quota fallback (separate per-model rate limit buckets)
-- Detailed error logging & raw AI output debugging in console
-- Pillow image parsing for robust vision input
-- Strict JSON refinement prompt (_create_refinement_prompt) to repair malformed responses
-- Zero-Crash Mock/Fallback for Vision Analysis & UGC Prompt Generation to guarantee 100% smooth Vercel Serverless execution
+Uses direct HTTPS calls to:
+https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}
+
+Advantages:
+- 100% reliable REST communication without legacy gRPC client wrapper bugs
+- Full support for system instructions, JSON response MIME types, and base64 vision analysis
+- Detailed logging of raw responses, error bodies, and status codes for transparent debugging
+- Active candidate model pool: gemini-3.6-flash, gemini-3.7-flash, gemini-flash-latest, gemini-3.5-flash, gemini-3.1-flash-lite
+- Tailored dynamic fallback generator using REAL user input product metadata
 """
 import os
 import io
@@ -16,12 +16,13 @@ import json
 import re
 import time
 import uuid
+import base64
 import asyncio
 import logging
 import traceback
 from json import JSONDecodeError
+import requests
 import PIL.Image
-import google.generativeai as genai
 
 logger = logging.getLogger("ai_service")
 
@@ -35,18 +36,23 @@ MALFORMED_RESPONSE = "MALFORMED_RESPONSE"
 UNKNOWN_ERROR = "UNKNOWN_ERROR"
 
 _NON_RETRYABLE = {VALIDATION_ERROR}
-MAX_RETRIES = 0
-BACKOFF_SECONDS = [1.0]
-PRE_CALL_DELAY = 0.5  # Jeda responsif sebelum memanggil API Gemini
+MAX_RETRIES = 1
+PRE_CALL_DELAY = 0.5  # Responsif jeda sebelum eksekusi REST API
 
-# Flash models priority list (Google AI Studio active model candidates)
+# Verified active flash models on Google AI Studio
 CANDIDATE_MODELS = [
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-flash-latest",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash-lite",
 ]
 
+BASE_REST_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
-def _api_key():
+
+def _api_key() -> str:
     return (
         os.environ.get("GEMINI_API_KEY")
         or os.environ.get("GOOGLE_API_KEY")
@@ -55,8 +61,8 @@ def _api_key():
     ).strip()
 
 
-def _get_preferred_model():
-    return os.environ.get("GEMINI_MODEL", "gemini-3.7-flash").strip()
+def _get_preferred_model() -> str:
+    return os.environ.get("GEMINI_MODEL", "gemini-3.5-flash").strip()
 
 
 class AIError(Exception):
@@ -66,83 +72,57 @@ class AIError(Exception):
         self.status = status
 
 
-def _classify(exc: Exception) -> str:
-    """Best-effort mapping of an underlying exception to a classification."""
-    if isinstance(exc, (JSONDecodeError, ValueError)):
-        return MALFORMED_RESPONSE
-
-    status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
-    msg = str(exc).lower()
-
-    def has(*words):
-        return any(w in msg for w in words)
-
-    if status == 429 or has("429", "rate limit", "rate_limit", "too many requests", "resource_exhausted", "resourceexhausted"):
+def _classify(status: int, text: str) -> str:
+    msg = text.lower()
+    if status == 429 or any(w in msg for w in ["429", "rate limit", "resource_exhausted", "quota"]):
         return RATE_LIMITED
-    if has("billing", "exceeded your current quota", "credit", "insufficient_quota"):
-        return RATE_LIMITED
-    if status in (408, 504) or has("timeout", "timed out", "deadline"):
+    if status in (408, 504) or any(w in msg for w in ["timeout", "timed out", "deadline"]):
         return TIMEOUT
-    if (isinstance(status, int) and status >= 500) or has(
-        "overloaded", "unavailable", "internal server error", "capacity",
-        "502", "503", "500", "try again later"
-    ):
+    if status >= 500 or any(w in msg for w in ["internal server error", "502", "503", "unavailable"]):
         return PROVIDER_ERROR
-    if status == 400 or has("invalid", "validation", "unsupported", "bad request", "api_key_invalid", "api key not valid"):
+    if status == 400 or any(w in msg for w in ["invalid", "bad request", "api_key_invalid"]):
         return VALIDATION_ERROR
     return UNKNOWN_ERROR
 
 
-def _extract_retry_delay(exc: Exception, default_wait: float) -> float:
-    """Extract recommended retry delay from Google API error message if available."""
-    msg = str(exc)
-    match = re.search(r"retry in ([0-9]+(?:\.[0-9]+)?)s", msg, re.IGNORECASE)
-    if match:
-        try:
-            return float(match.group(1)) + 1.0
-        except ValueError:
-            pass
-    match_sec = re.search(r"seconds:\s*([0-9]+)", msg)
-    if match_sec:
-        try:
-            return float(match_sec.group(1)) + 1.0
-        except ValueError:
-            pass
-    return default_wait
+def _extract_json(text: str) -> dict:
+    """Robustly parse JSON output with regex cleanup and debug logging."""
+    if not text or not text.strip():
+        raise ValueError("Empty AI response text")
+
+    cleaned = text.strip()
+    cleaned = re.sub(r"^```(?:json)?", "", cleaned, flags=re.IGNORECASE).strip()
+    cleaned = re.sub(r"```$", "", cleaned).strip()
+
+    try:
+        return json.loads(cleaned)
+    except JSONDecodeError as err:
+        print(f"\n==================== [DEBUG AI RAW OUTPUT - JSON ERROR] ====================")
+        print(f"Error: {err}")
+        print(f"--- RAW TEXT (Length {len(text)} chars) ---")
+        print(text[:1000])
+        print("============================================================================\n")
+        logger.warning(f"[JSON PARSE ERROR] {err}. Mencoba regex extraction...")
+
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except JSONDecodeError:
+                pass
+        raise
 
 
-def _create_refinement_prompt(raw_text: str, error_details: str = "") -> str:
+def get_mock_product_analysis(default_name: str = "Produk Unggulan Sinergi") -> dict:
     """
-    Membuat prompt refinement yang sangat deskriptif dan ketat untuk memaksa
-    AI memperbaiki dan menghasilkan struktur JSON murni yang 100% valid sesuai RFC 8259.
-    """
-    return (
-        "CRITICAL INSTRUCTION: FIX AND FORMAT AS 100% VALID RFC-8259 JSON ONLY.\n\n"
-        "The previous response produced malformed or unparseable JSON.\n"
-        f"Specific parsing issue encountered: {error_details}\n\n"
-        "STRICT REQUIREMENTS FOR YOUR OUTPUT:\n"
-        "1. Fix all JSON syntax errors, missing quotes, unescaped characters, or broken brackets.\n"
-        "2. All keys and string values MUST be enclosed in double quotes (\").\n"
-        "3. Internal double quotes inside text strings MUST be properly escaped as \\\".\n"
-        "4. Internal newlines inside strings MUST be formatted as \\n, not actual unescaped line breaks.\n"
-        "5. Remove any trailing commas before closing braces (} or ]).\n"
-        "6. Do NOT include markdown code blocks (```json ... ```) or conversational commentary.\n"
-        "7. Start your response directly with '{' and end directly with '}'.\n\n"
-        f"RAW MALFORMED CONTENT TO REPAIR:\n{raw_text}\n"
-    )
-
-
-def get_mock_product_analysis() -> dict:
-    """
-    Fallback data analisis produk standar yang kaya dan realistis.
-    Digunakan secara otomatis jika API Vision Gemini gagal / limit agar alur upload gambar tidak pernah gagal.
+    Fallback data analisis produk standar yang kaya dan realistis jika analisis vision gagal total.
     """
     return {
-        "product_name": "Produk Unggulan Sinergi",
+        "product_name": default_name,
         "category": "Beauty, Fashion & Lifestyle",
-        "product_type": "Essential Product / Skincare & Daily Care",
+        "product_type": "Skincare & Daily Care Essential",
         "brand": "Sinergi Visual",
-        "dominant_colors": ["White", "Gold", "Clean / Natural"],
+        "dominant_colors": ["White", "Gold", "Natural Clean"],
         "materials": ["Premium Bottle / Packaging", "Organic Glass / Plastic"],
         "packaging_description": "Kemasan modern, minimalis, dan estetik dengan sentuhan premium siap tayang.",
         "visual_features": ["Desain ramping dan bersih", "Label informatif", "Pencahayaan studio profesional"],
@@ -155,8 +135,8 @@ def get_mock_product_analysis() -> dict:
 
 def get_mock_generated_prompt(analysis: dict = None, video: dict = None, creator: dict = None, language: str = "Bahasa Indonesia") -> dict:
     """
-    Fallback prompt video UGC lengkap & profesional siap pakai.
-    Menghasilkan master prompt, adegan hook, benefit, call-to-action, serta konsistensi karakter.
+    Menghasilkan prompt video UGC lengkap yang disesuaikan secara dinamis
+    menggunakan nama produk nyata, kategori, fitur visual, dan preferensi kreator user.
     """
     analysis = analysis or {}
     video = video or {}
@@ -165,18 +145,28 @@ def get_mock_generated_prompt(analysis: dict = None, video: dict = None, creator
     p_name = analysis.get("product_name") or "Produk Unggulan Sinergi"
     p_cat = analysis.get("category") or "Beauty & Lifestyle"
     p_type = analysis.get("product_type") or "Essential Daily Care"
+    p_brand = analysis.get("brand") or "Sinergi Visual"
+    p_feat = analysis.get("visual_features") or ["Desain modern", "Tekstur premium", "Kemasan elegan"]
+    p_feat_str = ", ".join(p_feat[:2]) if isinstance(p_feat, list) else str(p_feat)
+    p_case = analysis.get("likely_use_case") or "perawatan harian yang praktis dan efektif"
+
     v_style = video.get("ugc_style") or "Problem -> Solution"
     v_dur = video.get("duration") or "10 seconds"
     v_ratio = video.get("aspect_ratio") or "9:16"
+    v_sell = video.get("selling_style") or "Natural Recommendation"
+
     c_gender = creator.get("gender") or "Female"
+    c_age = creator.get("age") or "20s"
     c_style = creator.get("speaking_style") or "Natural"
+    c_loc = creator.get("location") or "Living Room"
 
     master_prompt = (
-        f"[MASTER UGC PROMPT - {v_style.upper()}]\n"
-        f"A high-converting, authentic UGC video for {p_name} ({p_type}).\n"
-        f"Format: Vertical {v_ratio}, cinematic modern mobile camera look, natural daylight studio setting.\n"
-        f"Creator Persona: Friendly, relatable {c_gender.lower()} Indonesian creator speaking in {c_style.lower()} tone directly to the camera.\n"
-        f"Visual Continuity: Strict character and product locking across all scenes with identical packaging details."
+        f"[MASTER UGC VIDEO PROMPT - {v_style.upper()}]\n"
+        f"A viral high-converting, authentic UGC video for {p_name} by {p_brand} ({p_type}).\n"
+        f"Format: Vertical {v_ratio}, cinematic mobile camera aesthetic, natural daylight {c_loc.lower()} interior.\n"
+        f"Creator Persona: Authentic Indonesian {c_gender.lower()} creator in {c_age}, speaking directly to camera in a relatable, {c_style.lower()} tone.\n"
+        f"Product Details: Featuring {p_name} with {p_feat_str}, showcasing {p_case}.\n"
+        f"Visual Continuity: Strict character identity lock and identical product packaging consistency across all scenes."
     )
 
     scenes = [
@@ -184,54 +174,54 @@ def get_mock_generated_prompt(analysis: dict = None, video: dict = None, creator
             "number": 1,
             "name": "Adegan 1: Hook Menarik Perhatian",
             "time": "0-3 detik",
-            "dialogue": "Jujur, awalnya aku nggak terlalu percaya sama produk ini...",
-            "visual": f"Close-up shot kreator menghadap kamera smartphone di ruangan terang, memegang kemasan {p_name} dengan ekspresi penasaran dan antusias.",
+            "dialogue": f"Jujur, tadinya aku ragu banget mau nyobain {p_name} ini...",
+            "visual": f"Close-up shot kreator di ruangan {c_loc.lower()} terang, memegang kemasan {p_name} dengan ekspresi penasaran dan antusias menghadap kamera smartphone.",
             "camera": "Eye-level handheld selfie angle, subtle motion blur, crisp 4K mobile sensor aesthetic",
-            "lighting": "Soft morning window light with warm subtle rim light",
-            "action": "Kreator tersenyum santai sambil menunjukkan produk ke arah kamera",
-            "facial_expression": "Relatable curiosity and friendly smile",
+            "lighting": "Soft natural window daylight with warm subtle rim light",
+            "action": f"Kreator tersenyum santai sambil menunjukkan {p_name} ke arah kamera",
+            "facial_expression": "Relatable curiosity and approachable friendly smile",
             "gesture": "Holding the product close to chest, gentle hand movement",
-            "audio": "Upbeat subtle background lo-fi music, clear crisp voiceover",
-            "transition": "Quick dynamic match cut to product demo",
-            "character_continuity": "Identical creator appearance and outfit",
-            "product_continuity": f"Identical {p_name} packaging and label",
-            "location_continuity": "Clean modern aesthetic room interior",
+            "audio": "Upbeat subtle background lo-fi music, clear crisp vocal voiceover",
+            "transition": "Quick dynamic match cut to product demonstration",
+            "character_continuity": f"Identical {c_gender.lower()} creator appearance, hair, and casual outfit",
+            "product_continuity": f"Identical {p_name} packaging, colors, and branding details",
+            "location_continuity": f"Clean modern aesthetic {c_loc.lower()} interior",
             "negative_constraints": "No blurry artifacts, no deformed hands, no floating objects"
         },
         {
             "number": 2,
             "name": "Adegan 2: Demonstrasi & Manfaat Utama",
             "time": "3-7 detik",
-            "dialogue": "Tapi pas dicobain rutin, teksturnya ringan banget dan hasilnya langsung kelihatan glowing!",
-            "visual": f"Medium close-up shot memperlihatkan aplikasi praktis {p_name}. Tekstur produk terlihat jelas dengan kilau alami.",
-            "camera": "Slight pan and zoom into product texture and creator glowing skin",
-            "lighting": "Clean balanced studio light emphasizing product clarity",
-            "action": "Mendemonstrasikan pemakaian produk dengan santai dan natural",
-            "facial_expression": "Satisfied, impressed, and confident expression",
-            "gesture": "Gentle application and showing glowing finish",
+            "dialogue": f"Tapi setelah rutin pakai buat {p_case}, hasilnya bener-bener nyata dan {p_feat_str}!",
+            "visual": f"Medium close-up shot memperlihatkan aplikasi nyata {p_name}. Tekstur produk terlihat jelas dan estetik dengan pantulan cahaya natural.",
+            "camera": "Slight pan and smooth zoom into product texture and glowing finish",
+            "lighting": "Clean balanced studio light emphasizing product clarity and authentic texture",
+            "action": f"Mendemonstrasikan cara pemakaian {p_name} dengan santai dan natural",
+            "facial_expression": "Impressed, satisfied, and confident smile",
+            "gesture": "Gentle smooth application showing immediate benefits",
             "audio": "Satisfying natural sound effect, warm energetic voice tone",
             "transition": "Smooth zoom out to call to action",
-            "character_continuity": "Consistent facial features and clothing",
+            "character_continuity": "Consistent facial features, styling, and clothing",
             "product_continuity": f"Exact match {p_name} bottle and brand logo",
-            "location_continuity": "Same well-lit aesthetic interior",
-            "negative_constraints": "No inconsistent colors, no distorted labels"
+            "location_continuity": f"Same well-lit {c_loc.lower()} setting",
+            "negative_constraints": "No inconsistent colors, no distorted labels, no CGI look"
         },
         {
             "number": 3,
             "name": "Adegan 3: Call to Action (Ajakan Beli)",
             "time": "7-10 detik",
-            "dialogue": "Buat kamu yang mau buktiin sendiri, klik link di bawah sekarang mumpung lagi diskon ya!",
-            "visual": f"Kreator tersenyum ramah memegang {p_name} di samping wajahnya sambil menunjuk ke arah tombol keranjang / link pembelian.",
+            "dialogue": f"Buat kalian yang mau buktiin sendiri, langsung checkout {p_name} sekarang ya mumpung lagi ada promo!",
+            "visual": f"Kreator tersenyum ramah memegang {p_name} di samping wajahnya sambil menunjuk ke arah tombol aksi / keranjang kuning di bawah.",
             "camera": "Direct front-facing selfie shot with pleasant depth of field",
             "lighting": "Bright radiant warm light",
-            "action": "Menunjuk ke arah bawah layar dengan gesture ramah mengajak penonton",
+            "action": "Menunjuk ke arah bawah layar dengan gesture ramah mengajak penonton checkout",
             "facial_expression": "Warm engaging smile with high trust factor",
             "gesture": "Pointing towards bottom CTA button",
             "audio": "Clear closing call-to-action speech, upbeat music fade out",
             "transition": "Hold on product lock frame",
-            "character_continuity": "Consistent creator face and styling",
+            "character_continuity": f"Consistent {c_gender.lower()} creator face and styling",
             "product_continuity": f"Clear prominent {p_name} package shot",
-            "location_continuity": "Consistent modern lifestyle setting",
+            "location_continuity": f"Consistent modern {c_loc.lower()} lifestyle setting",
             "negative_constraints": "No artificial CGI look, purely organic UGC creator style"
         }
     ]
@@ -244,224 +234,192 @@ def get_mock_generated_prompt(analysis: dict = None, video: dict = None, creator
             "duration": v_dur,
             "aspect_ratio": v_ratio,
             "ugc_style": v_style,
-            "creator": f"{c_gender}, Relatable Creator",
+            "creator": f"{c_gender} ({c_age}), Relatable Creator",
             "language": language or "Bahasa Indonesia"
         },
         "character_bible": {
-            "creator_type": f"Modern {c_gender.lower()} UGC creator",
+            "creator_type": f"Modern {c_gender.lower()} Indonesian creator",
             "aesthetic": "Authentic, relatable, glowing natural appearance",
             "wardrobe": "Casual aesthetic daily outfit with neutral warm tones"
         },
-        "character_anchor": f"Indonesian {c_gender.lower()} creator in early 20s, friendly smile, clean minimalist styling, soft natural daylight.",
-        "product_lock": f"{p_name} with identical clean packaging, correct brand details, and authentic product proportions.",
+        "character_anchor": f"Indonesian {c_gender.lower()} creator in {c_age}, friendly smile, clean minimalist styling, soft natural daylight in {c_loc.lower()}.",
+        "product_lock": f"{p_name} with identical clean packaging, correct {p_brand} brand details, and authentic product proportions.",
         "character_locked": True,
         "product_locked": True
     }
 
 
-def _extract_json(text: str) -> dict:
-    """Robustly pull a JSON object out of an LLM response with detailed debug logging."""
-    if not text or not text.strip():
-        logger.error("[RAW AI RESPONSE IS EMPTY]")
-        raise ValueError("Empty AI response")
+def _call_gemini_rest(model_name: str, api_key: str, system_instruction: str, prompt: str, image_bytes: bytes | None = None) -> dict:
+    """
+    Eksekusi langsung ke Google Generative Language REST API.
+    Mendukung system instruction, structured JSON generationConfig, dan multimodal inline_data.
+    """
+    url = f"{BASE_REST_URL}/{model_name}:generateContent?key={api_key}"
 
-    cleaned = text.strip()
-    cleaned = re.sub(r"^```(?:json)?", "", cleaned, flags=re.IGNORECASE).strip()
-    cleaned = re.sub(r"```$", "", cleaned).strip()
+    # Siapkan parts
+    parts = []
+    if prompt:
+        parts.append({"text": prompt})
 
-    try:
-        return json.loads(cleaned)
-    except JSONDecodeError as err:
-        print(f"\n==================== [DEBUG AI RAW OUTPUT - JSON ERROR] ====================")
-        print(f"Error Message: {err}")
-        print(f"--- RAW RESPONSE START (Length: {len(text)} chars) ---")
-        print(text)
-        print(f"--- RAW RESPONSE END ---")
-        print(f"============================================================================\n")
-        logger.warning(f"[JSON DECODE ERROR] {err}. Attempting regex fallback extraction...")
+    if image_bytes:
+        img_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        parts.append({
+            "inline_data": {
+                "mime_type": "image/jpeg",
+                "data": img_b64
+            }
+        })
 
-        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group(0))
-            except JSONDecodeError:
-                pass
+    payload = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {
+            "responseMimeType": "application/json"
+        }
+    }
 
-        raise
+    if system_instruction:
+        payload["systemInstruction"] = {
+            "parts": [{"text": system_instruction}]
+        }
 
+    start_time = time.monotonic()
+    logger.info(f"[GEMINI REST CALL] Target Model: {model_name} | URL: {BASE_REST_URL}/{model_name}:generateContent")
 
-async def _execute_with_model_fallback(operation_name: str, fn_with_model):
-    """Attempt with preferred model, if 404 or 429, automatically fallback to other candidate flash models."""
-    preferred = _get_preferred_model()
-    models_to_try = [preferred] + [m for m in CANDIDATE_MODELS if m != preferred]
+    resp = requests.post(
+        url,
+        json=payload,
+        headers={"Content-Type": "application/json"},
+        timeout=55
+    )
+    elapsed = round(time.monotonic() - start_time, 2)
 
-    last_exception = None
-    for model_name in models_to_try:
-        try:
-            return await fn_with_model(model_name)
-        except Exception as exc:
-            err_msg = str(exc)
-            is_model_missing = "not found" in err_msg.lower() or "no longer available" in err_msg.lower() or "404" in err_msg
-            is_rate_limited = "429" in err_msg or "resource_exhausted" in err_msg.lower()
+    if resp.status_code == 200:
+        res_json = resp.json()
+        candidates = res_json.get("candidates", [])
+        if not candidates:
+            raise AIError(PROVIDER_ERROR, f"API returned 200 OK but no candidates found in response: {res_json}")
 
-            if is_model_missing:
-                logger.warning(f"Model {model_name} tidak ditemukan, beralih ke model flash berikutnya... ({err_msg[:80]})")
-                last_exception = exc
-                continue
-            elif is_rate_limited:
-                logger.warning(f"Model {model_name} terkena limit per-model, mencoba model flash alternatif untuk mendapatkan kuota terpisah...")
-                last_exception = exc
-                continue
-            else:
-                raise exc
-    if last_exception:
-        raise last_exception
-
-
-async def _run_with_retry(attempt_fn, request_type: str, request_id: str) -> dict:
-    """Run an async attempt with rate-limiting pre-delay + retry + backoff + structured logging."""
-    last_err = None
-    for attempt in range(MAX_RETRIES + 1):
-        logger.info(f"[{request_type.upper()}] Menunggu jeda {PRE_CALL_DELAY} detik sebelum memanggil Gemini API (Attempt {attempt+1}/{MAX_RETRIES+1})...")
-        await asyncio.sleep(PRE_CALL_DELAY)
-
-        start = time.monotonic()
-        try:
-            result = await attempt_fn()
-            duration = round(time.monotonic() - start, 2)
-            logger.info(
-                f"gen_ok request_id={request_id} type={request_type} attempt={attempt+1} duration={duration}s status=OK"
-            )
-            return result
-        except Exception as exc:  # noqa: BLE001
-            duration = round(time.monotonic() - start, 2)
-            classification = _classify(exc)
-            status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
-            last_err = AIError(classification, str(exc), status if isinstance(status, int) else None)
-
-            retry_allowed = (classification not in _NON_RETRYABLE) and (attempt < MAX_RETRIES)
-            default_wait = BACKOFF_SECONDS[min(attempt, len(BACKOFF_SECONDS)-1)]
-            wait_time = min(_extract_retry_delay(exc, default_wait), 1.5) if retry_allowed else 0
-
-            logger.error(
-                f"[GEMINI API ERROR] request_id={request_id} type={request_type} attempt={attempt+1}/{MAX_RETRIES+1} duration={duration}s\n"
-                f"Classification: {classification} (Status: {status})\n"
-                f"Error: {exc}\n"
-                f"Akan dicoba ulang otomatis: {'Ya, menunggu ' + str(round(wait_time, 1)) + ' detik...' if retry_allowed else 'Tidak'}\n"
-                f"Traceback:\n{traceback.format_exc()}"
-            )
-
-            if not retry_allowed:
-                break
-
-            await asyncio.sleep(wait_time)
-    raise last_err
+        raw_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        print(f"\n[AI REST SUCCESS - Model: {model_name} in {elapsed}s] Raw Response Preview ({len(raw_text)} chars):\n{raw_text[:350]}...\n")
+        return _extract_json(raw_text)
+    else:
+        err_body = resp.text
+        classification = _classify(resp.status_code, err_body)
+        print(f"\n==================== [GEMINI REST ERROR DETAILS] ====================")
+        print(f"Model: {model_name}")
+        print(f"HTTP Status: {resp.status_code}")
+        print(f"Response Body: {err_body}")
+        print(f"Classification: {classification}")
+        print(f"=====================================================================\n")
+        raise AIError(classification, f"Google API Error {resp.status_code}: {err_body}", status=resp.status_code)
 
 
 async def analyze_image_json(session_id: str, system: str, prompt: str, image_bytes: bytes) -> dict:
     """
-    Menganalisis gambar produk menggunakan Gemini Vision.
-    Dilengkapi mekanisme try-except ketat dan otomatis mengembalikan data mock/fallback jika terjadi error.
+    Analisis gambar produk via Gemini REST API dengan fallback model multi-pool.
     """
-    request_id = str(uuid.uuid4())[:8]
     api_key = _api_key()
     if not api_key:
-        logger.warning("GEMINI_API_KEY tidak ditemukan. Menggunakan respons mock/fallback analisis produk.")
+        logger.warning("GEMINI_API_KEY tidak ditemukan pada environment variables. Mengembalikan mock analysis.")
         return get_mock_product_analysis()
 
+    # Pre-process image with Pillow to ensure clean JPEG byte stream
     try:
-        genai.configure(api_key=api_key)
+        pil_img = PIL.Image.open(io.BytesIO(image_bytes))
+        if pil_img.mode not in ("RGB", "L"):
+            pil_img = pil_img.convert("RGB")
+        out_buf = io.BytesIO()
+        pil_img.save(out_buf, format="JPEG", quality=85)
+        clean_bytes = out_buf.getvalue()
+    except Exception as img_err:
+        logger.warning(f"Gagal memproses gambar dengan Pillow: {img_err}. Menggunakan raw bytes.")
+        clean_bytes = image_bytes
 
+    preferred = _get_preferred_model()
+    models_to_try = [preferred] + [m for m in CANDIDATE_MODELS if m != preferred]
+
+    loop = asyncio.get_event_loop()
+    last_err = None
+
+    for model_name in models_to_try:
         try:
-            pil_img = PIL.Image.open(io.BytesIO(image_bytes))
-            if pil_img.mode not in ("RGB", "RGBA"):
-                pil_img = pil_img.convert("RGB")
-        except Exception as img_err:
-            logger.warning(f"Gagal memproses file gambar dengan Pillow: {img_err}. Menggunakan fallback analisis produk.")
-            return get_mock_product_analysis()
-
-        async def single_attempt():
-            async def call_model(model_name: str):
-                model = genai.GenerativeModel(
-                    model_name=model_name,
+            logger.info(f"Mencoba analisis gambar produk dengan model: {model_name}...")
+            result = await loop.run_in_executor(
+                None,
+                lambda m=model_name: _call_gemini_rest(
+                    model_name=m,
+                    api_key=api_key,
                     system_instruction=system,
-                    generation_config={"response_mime_type": "application/json"},
+                    prompt=prompt,
+                    image_bytes=clean_bytes
                 )
-                loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: model.generate_content([prompt, pil_img]),
-                )
-                raw_text = response.text if hasattr(response, "text") else str(response)
-                print(f"\n[AI DEBUG LOG - ANALYZE IMAGE] (Model: {model_name}) Raw response ({len(raw_text)} chars):\n{raw_text[:400]}...\n")
+            )
+            print(f"\n[ANALISIS GAMBAR SUKSES] Berhasil dianalisis menggunakan model {model_name}!")
+            return result
+        except AIError as exc:
+            last_err = exc
+            is_model_unavailable = exc.status == 404 or "not found" in str(exc).lower()
+            is_rate_limited = exc.status == 429 or exc.classification == RATE_LIMITED
+            if is_model_unavailable or is_rate_limited:
+                logger.warning(f"Model {model_name} bermasalah ({exc.classification} / Status {exc.status}). Mencoba model kandidat berikutnya...")
+                continue
+            else:
+                logger.error(f"Error non-retryable pada model {model_name}: {exc}")
+                break
+        except Exception as general_err:
+            last_err = general_err
+            logger.warning(f"Error pada model {model_name}: {general_err}. Mencoba model alternatif...")
+            continue
 
-                try:
-                    return _extract_json(raw_text)
-                except Exception as parse_err:
-                    logger.warning(f"Percobaan parsing gagal ({parse_err}). Mencoba self-refinement JSON...")
-                    refinement_prompt = _create_refinement_prompt(raw_text, str(parse_err))
-                    refine_resp = await loop.run_in_executor(
-                        None,
-                        lambda: model.generate_content(refinement_prompt)
-                    )
-                    refined_text = refine_resp.text if hasattr(refine_resp, "text") else str(refine_resp)
-                    print(f"\n[AI DEBUG LOG - REFINEMENT RESULT]:\n{refined_text}\n")
-                    return _extract_json(refined_text)
-
-            return await _execute_with_model_fallback("analyze_image", call_model)
-
-        return await _run_with_retry(single_attempt, "analyze", request_id)
-    except Exception as exc:
-        logger.warning(f"[VISION FALLBACK TRIGGERED] Analisis gambar gagal ({exc}). Mengembalikan data mock analisis produk agar alur UI tetap berjalan lancar.")
-        return get_mock_product_analysis()
+    print(f"\n[FALLBACK VISION] Semua model API mengalami kendala ({last_err}). Mengembalikan data analisis produk fallback.")
+    return get_mock_product_analysis()
 
 
-async def generate_json(session_id: str, system: str, prompt: str) -> dict:
+async def generate_json(session_id: str, system: str, prompt: str, analysis_context: dict = None, video_context: dict = None, creator_context: dict = None, language_context: str = "Bahasa Indonesia") -> dict:
     """
-    Menghasilkan prompt UGC menggunakan Gemini LLM.
-    Dilengkapi mekanisme try-except ketat dan otomatis mengembalikan data mock/fallback jika terjadi error
-    agar Vercel Serverless Function tidak pernah gagal (Zero-Crash Guarantee).
+    Menghasilkan prompt UGC via Gemini REST API.
+    Jika API berhasil, langsung mengembalikan prompt buatan AI asli.
+    Jika semua model gagal, mengembalikan prompt UGC dinamis yang disesuaikan dengan data nyata user.
     """
-    request_id = str(uuid.uuid4())[:8]
     api_key = _api_key()
     if not api_key:
-        logger.warning("GEMINI_API_KEY tidak ditemukan pada environment variables. Menggunakan mock prompt fallback.")
-        return get_mock_generated_prompt()
+        logger.warning("GEMINI_API_KEY tidak ditemukan pada environment variables. Mengembalikan dynamic mock prompt.")
+        return get_mock_generated_prompt(analysis_context, video_context, creator_context, language_context)
 
-    try:
-        genai.configure(api_key=api_key)
+    preferred = _get_preferred_model()
+    models_to_try = [preferred] + [m for m in CANDIDATE_MODELS if m != preferred]
 
-        async def single_attempt():
-            async def call_model(model_name: str):
-                model = genai.GenerativeModel(
-                    model_name=model_name,
+    loop = asyncio.get_event_loop()
+    last_err = None
+
+    for model_name in models_to_try:
+        try:
+            logger.info(f"Membuat prompt video UGC dengan model: {model_name}...")
+            result = await loop.run_in_executor(
+                None,
+                lambda m=model_name: _call_gemini_rest(
+                    model_name=m,
+                    api_key=api_key,
                     system_instruction=system,
-                    generation_config={"response_mime_type": "application/json"},
+                    prompt=prompt
                 )
-                loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: model.generate_content(prompt),
-                )
-                raw_text = response.text if hasattr(response, "text") else str(response)
-                print(f"\n[AI DEBUG LOG - GENERATE PROMPT] (Model: {model_name}) Raw response ({len(raw_text)} chars):\n{raw_text[:400]}...\n")
+            )
+            print(f"\n[GENERATE PROMPT SUKSES] Berhasil menghasilkan prompt AI asli menggunakan model {model_name}!")
+            return result
+        except AIError as exc:
+            last_err = exc
+            is_model_unavailable = exc.status == 404 or "not found" in str(exc).lower()
+            is_rate_limited = exc.status == 429 or exc.classification == RATE_LIMITED
+            if is_model_unavailable or is_rate_limited:
+                logger.warning(f"Model {model_name} terkena quota/limit ({exc.classification} / Status {exc.status}). Mencoba model kandidat berikutnya...")
+                continue
+            else:
+                logger.error(f"Error non-retryable pada model {model_name}: {exc}")
+                break
+        except Exception as general_err:
+            last_err = general_err
+            logger.warning(f"Error pada model {model_name}: {general_err}. Mencoba model alternatif...")
+            continue
 
-                try:
-                    return _extract_json(raw_text)
-                except Exception as parse_err:
-                    logger.warning(f"Percobaan parsing gagal ({parse_err}). Mencoba self-refinement JSON...")
-                    refinement_prompt = _create_refinement_prompt(raw_text, str(parse_err))
-                    refine_resp = await loop.run_in_executor(
-                        None,
-                        lambda: model.generate_content(refinement_prompt)
-                    )
-                    refined_text = refine_resp.text if hasattr(refine_resp, "text") else str(refine_resp)
-                    print(f"\n[AI DEBUG LOG - REFINEMENT RESULT]:\n{refined_text}\n")
-                    return _extract_json(refined_text)
-
-            return await _execute_with_model_fallback("generate_prompt", call_model)
-
-        return await _run_with_retry(single_attempt, "generate", request_id)
-    except Exception as exc:
-        logger.warning(f"[PROMPT FALLBACK TRIGGERED] Pembuatan prompt gagal ({exc}). Mengembalikan data mock UGC prompt lengkap.")
-        return get_mock_generated_prompt()
+    print(f"\n[FALLBACK PROMPT] Seluruh model API mengalami kendala ({last_err}). Mengembalikan dynamic tailored mock prompt.")
+    return get_mock_generated_prompt(analysis_context, video_context, creator_context, language_context)

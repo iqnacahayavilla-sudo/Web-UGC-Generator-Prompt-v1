@@ -43,7 +43,15 @@ async def generate(session_id: str, analysis: dict, video: dict, creator: dict,
             analysis, video, creator, language, natural_language, modifier,
             character_anchor=character_anchor, reuse_character=reuse_character,
         )
-        data = await ai_service.generate_json(session_id, system, user)
+        data = await ai_service.generate_json(
+            session_id=session_id,
+            system=system,
+            prompt=user,
+            analysis_context=analysis,
+            video_context=video,
+            creator_context=creator,
+            language_context=language,
+        )
     except Exception as e:
         logger.warning(f"Error pada pemanggilan generate_json: {e}. Mengaktifkan mock prompt fallback.")
         data = ai_service.get_mock_generated_prompt(analysis, video, creator, language)
