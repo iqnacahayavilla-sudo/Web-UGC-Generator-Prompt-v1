@@ -11,30 +11,31 @@ _SCHEMA_KEYS = [
 ]
 
 SYSTEM = (
-    "You are a product analyst for UGC video marketing. You look at a single "
-    "product photo and extract accurate, structured facts about the product. "
-    "Only describe what is visibly evident. Never invent a brand or text that "
-    "is not clearly visible. Respond with valid JSON only."
+    "You are an expert AI product vision analyst for viral UGC (User-Generated Content) video marketing. "
+    "Carefully inspect the provided product photo with maximum visual precision. Accurately identify the exact product name "
+    "(e.g. 'Stanley Quencher H2.0 Tumbler', 'Stainless Steel Insulated Cup', 'Vitamin C Brightening Serum', 'Wireless Noise Cancelling Earbuds'), "
+    "exact brand name if visible, colors, materials, packaging characteristics, and ideal target audience. "
+    "Respond with valid JSON only."
 )
 
-PROMPT = """Analyze this product image and return ONLY a JSON object with exactly these keys:
+PROMPT = """Carefully analyze this product photo and return ONLY a valid JSON object with the following fields:
 
 {
-  "product_name": "short descriptive name of the product",
-  "category": "high level category e.g. Skincare, Electronics, Food",
-  "product_type": "specific type e.g. Serum bottle, Wireless earbuds",
+  "product_name": "precise real-world name of the product identified in the photo (e.g. Tumbler Stanley Quencher / Botol Termos Stainless / Serum Skincare)",
+  "category": "category (e.g. Home & Living / Beauty & Skincare / Gadget & Electronics / Fashion & Lifestyle)",
+  "product_type": "specific item type (e.g. Insulated Tumbler, Face Serum, Wireless Earbuds, Tumbler Cup)",
   "brand": "visible brand name or empty string if none visible",
-  "dominant_colors": ["list", "of", "colors"],
-  "materials": ["list of materials e.g. glass, plastic, metal"],
-  "packaging_description": "describe the packaging shape, cap, label",
-  "visual_features": ["notable visual details"],
-  "likely_use_case": "what the product is used for",
-  "target_audience": "who typically buys this",
-  "visible_text": "any text legibly visible on the product, else empty string",
-  "product_positioning": "premium / affordable / natural / clinical etc."
+  "dominant_colors": ["list", "of", "exact", "colors", "visible", "on", "the", "product"],
+  "materials": ["list of materials e.g. stainless steel, matte coating, plastic lid, glass"],
+  "packaging_description": "detailed visual description of the product shape, handle, lid, straw, cap, or finish",
+  "visual_features": ["key visual details, texture, and aesthetic design highlights"],
+  "likely_use_case": "what the product is used for in daily life",
+  "target_audience": "ideal demographic who loves and uses this product",
+  "visible_text": "any legible text or logo printed on the product, or empty string",
+  "product_positioning": "viral / premium / lifestyle / aesthetic / practical"
 }
 
-Return JSON only, no explanation, no markdown fences."""
+Return JSON only, without markdown code fences."""
 
 
 async def analyze(session_id: str, image_bytes: bytes) -> dict:

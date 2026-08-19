@@ -384,40 +384,32 @@ export default function Studio() {
     setAnalyzing(true);
     try {
       const data = await analyzeImage(file);
-      setProjectId(data.project_id);
-      setAnalysis(data.product_analysis || {
-        product_name: file.name.split(".")[0] || "Produk Pilihan",
-        category: "Beauty, Fashion & Lifestyle",
-        product_type: "Essential Product",
-        brand: "Sinergi Visual Brand",
-        dominant_colors: ["White", "Clean / Natural"],
-        materials: ["Premium Packaging"],
-        packaging_description: "Kemasan estetik dan modern.",
-        visual_features: ["Desain rapi", "Label informatif"],
-        likely_use_case: "Penggunaan harian",
-        target_audience: "Kreator & Konsumen Digital",
-        visible_text: "",
-        product_positioning: "Modern & Berkualitas",
-      });
-      toast.success("Foto produk berhasil diunggah dan dianalisis!");
+      setProjectId(data?.project_id || `proj_${Date.now()}`);
+      if (data?.product_analysis) {
+        setAnalysis(data.product_analysis);
+        toast.success(`Foto produk berhasil dianalisis: ${data.product_analysis.product_name || "Produk Siap"}`);
+      } else {
+        throw new Error("Data analisis produk tidak ditemukan");
+      }
     } catch (e) {
-      console.warn("Upload network fallback activated:", e);
+      console.error("Vision Analysis Error (OpenAI / Gemini):", e);
+      const errMsg = e?.response?.data?.detail?.message || e?.message || "Gagal menganalisis foto dengan AI";
+      toast.error(`Analisis AI: ${errMsg}. Silakan periksa atau sesuaikan detail produk di bawah.`);
       setProjectId(`proj_${Date.now()}`);
       setAnalysis({
-        product_name: file.name.split(".")[0] || "Produk Pilihan",
-        category: "Beauty, Fashion & Lifestyle",
-        product_type: "Essential Product",
-        brand: "Sinergi Visual Brand",
-        dominant_colors: ["White", "Clean / Natural"],
-        materials: ["Premium Packaging"],
-        packaging_description: "Kemasan estetik dan modern.",
-        visual_features: ["Desain rapi", "Label informatif"],
-        likely_use_case: "Penggunaan harian",
-        target_audience: "Kreator & Konsumen Digital",
+        product_name: "Tumbler / Botol Minum Estetik",
+        category: "Home & Lifestyle",
+        product_type: "Insulated Tumbler / Botol Minum",
+        brand: "",
+        dominant_colors: ["Neutral Aesthetic"],
+        materials: ["Stainless Steel / High Quality Material"],
+        packaging_description: "Bodi tumbler modern dengan pegangan dan tutup praktis.",
+        visual_features: ["Desain ergonomis", "Tutup anti-tumpah", "Finishing estetik"],
+        likely_use_case: "Menjaga suhu minuman panas atau dingin sepanjang hari",
+        target_audience: "Pria & Wanita aktif, pekerja kantoran, mahasiswa, dan kreator",
         visible_text: "",
-        product_positioning: "Modern & Berkualitas",
+        product_positioning: "Aesthetic, Viral & Fungsional",
       });
-      toast.success("Foto produk berhasil diunggah!");
     } finally {
       setAnalyzing(false);
     }

@@ -644,7 +644,11 @@ async def analyze_image_json(session_id: str, system: str, prompt: str, image_by
             print(f"\n[ANALISIS GAMBAR SUKSES] Berhasil menganalisis foto produk dengan OpenAI {openai_model_name}!")
             return result
         except Exception as oai_err:
-            print(f"[OPENAI VISION ERROR] {oai_err}. Beralih ke fallback provider...")
+            print(f"\n[OPENAI VISION ERROR] {oai_err}. Beralih ke fallback provider...\n")
+            logger.error(f"[OPENAI VISION ERROR] {oai_err}")
+    else:
+        logger.warning("[AI CONFIG NOTICE] OPENAI_API_KEY belum di-set pada Environment Variables.")
+        print("[AI CONFIG NOTICE] OPENAI_API_KEY belum di-set. Mencoba fallback ke Gemini API.")
 
     # 2. Fallback Engine: Google Gemini Multi-Pool
     gemini_key = _gemini_api_key()
@@ -700,7 +704,11 @@ async def generate_json(session_id: str, system: str, prompt: str, analysis_cont
             print(f"\n[GENERATE PROMPT SUKSES] Berhasil menghasilkan prompt AI asli menggunakan OpenAI {openai_model_name}!")
             return result
         except Exception as oai_err:
-            print(f"[OPENAI GENERATE ERROR] {oai_err}. Beralih ke fallback provider...")
+            print(f"\n[OPENAI GENERATE ERROR] {oai_err}. Beralih ke fallback provider...\n")
+            logger.error(f"[OPENAI GENERATE ERROR] {oai_err}")
+    else:
+        logger.warning("[AI CONFIG NOTICE] OPENAI_API_KEY belum di-set pada Environment Variables.")
+        print("[AI CONFIG NOTICE] OPENAI_API_KEY belum di-set. Mencoba fallback ke Gemini API.")
 
     # 2. Fallback Engine: Google Gemini Multi-Pool
     gemini_key = _gemini_api_key()
