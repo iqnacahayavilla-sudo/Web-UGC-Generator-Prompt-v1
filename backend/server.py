@@ -23,14 +23,22 @@ from services.credit_service import CreditService, PLAN_CATALOG, TOPUP_PACKAGES
 from services.payment_service import PaymentService
 from services.supabase_service import SupabaseService, GENERATE_CREDIT_COST
 
-mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+mongo_url = os.environ.get('MONGO_URL', '')
 db_name = os.environ.get('MONGO_DB_NAME') or os.environ.get('DB_NAME', 'ugc_prompt_studio')
-client = AsyncIOMotorClient(mongo_url)
-db = client[db_name]
+client = None
+db = None
+
+if mongo_url and not mongo_url.startswith("mongodb://localhost"):
+    try:
+        client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=2000)
+        db = client[db_name]
+    except Exception as mongo_err:
+        pass
 
 credit_service = CreditService(db)
 supabase_service = SupabaseService(db)
 payment_service = PaymentService(credit_service)
+
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -660,4 +668,9 @@ app.add_middleware(
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    if client is not None:
+        try:
+            client.close()
+        except Exception:
+            pass
+
