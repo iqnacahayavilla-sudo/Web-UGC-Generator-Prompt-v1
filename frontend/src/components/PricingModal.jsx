@@ -23,7 +23,7 @@ const PLANS = [
     features: [
       "100 Token Generator / Hari",
       "Reset otomatis setiap 00:00 WIB",
-      "Analisis Karakteristik Produk Gemini AI",
+      "Analisis Karakteristik Produk OpenAI Vision",
       "Seluruh Pilihan Gaya & Kreator UGC",
       "Ekspor Prompt Standar Google Flow",
     ],

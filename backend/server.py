@@ -468,7 +468,7 @@ async def generate_prompt(
             amount=credit_cost,
             category=f"UGC Prompt - {req.video_settings.ugc_style}",
             prompt_result={"summary": result.get("summary")},
-            model_used="gemini-flash"
+            model_used="gpt-4o-mini"
         )
         result["credit_status"] = credit_deduction
     except Exception as e:
