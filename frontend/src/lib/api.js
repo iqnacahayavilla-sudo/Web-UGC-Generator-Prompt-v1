@@ -6,6 +6,15 @@ const API = "/api";
 
 export const fileUrl = (path) => `${API}/files/${path}`;
 
+export async function checkHealth() {
+  try {
+    const { data } = await axios.get(`${API}/health`);
+    return data;
+  } catch (e) {
+    return { status: "error", error: e?.message };
+  }
+}
+
 export async function analyzeImage(file) {
   // Convert to base64 Data URL as backup payload
   const toBase64 = (f) =>

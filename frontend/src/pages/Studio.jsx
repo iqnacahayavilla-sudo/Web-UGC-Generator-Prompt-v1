@@ -406,10 +406,20 @@ export default function Studio() {
       // Map to informative, safe user message
       if (status === 401 || (typeof errMsg === "string" && errMsg.toLowerCase().includes("auth"))) {
         errMsg = "OpenAI authentication gagal. Periksa OPENAI_API_KEY di Vercel / server.";
+      } else if (status === 403) {
+        errMsg = "Akses OpenAI ditolak. Periksa izin API key Anda.";
       } else if (status === 429 || (typeof errMsg === "string" && (errMsg.toLowerCase().includes("quota") || errMsg.toLowerCase().includes("rate limit")))) {
-        errMsg = "Batas kuota/limit OpenAI tercapai. Silakan periksa saldo akun OpenAI.";
+        errMsg = "OpenAI quota tidak mencukupi atau limit tercapai. Silakan periksa saldo akun OpenAI.";
       } else if (status === 400) {
-        errMsg = typeof errMsg === "string" && errMsg.includes("Format") ? errMsg : "Format atau ukuran foto tidak valid (Maksimal 10 MB).";
+        errMsg = typeof errMsg === "string" && errMsg.includes("Format") ? errMsg : "Foto tidak dapat dianalisis atau format tidak valid (Maksimal 10 MB).";
+      } else if (status === 405) {
+        errMsg = "Metode request tidak didukung (405). Pastikan route Vercel API terhubung ke FastAPI.";
+      } else if (status >= 500) {
+        if (typeof errMsg === "string" && errMsg.includes("OPENAI_API_KEY")) {
+          errMsg = "OPENAI_API_KEY belum dikonfigurasi di environment Vercel.";
+        } else {
+          errMsg = "Terjadi kesalahan pada server AI. Silakan coba beberapa saat lagi.";
+        }
       }
 
       toast.error(`Analisis AI: ${errMsg}`);

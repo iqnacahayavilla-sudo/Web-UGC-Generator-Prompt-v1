@@ -128,7 +128,7 @@ def _call_openai_rest(model_name: str, api_key: str, system_instruction: str, pr
     Execute HTTP POST request to OpenAI Chat Completions API with exponential backoff retry for transient errors.
     """
     if not api_key:
-        raise AIError(OPENAI_AUTH_ERROR, "OPENAI_API_KEY tidak dikonfigurasi pada server.", status=401)
+        raise AIError(OPENAI_AUTH_ERROR, "OPENAI_API_KEY belum dikonfigurasi di environment Vercel.", status=500)
 
     messages = []
     if system_instruction:
@@ -244,9 +244,9 @@ async def analyze_image_json(session_id: str, system: str, prompt: str, image_by
     openai_model_name = _openai_model()
 
     if not openai_key:
-        err_msg = "OPENAI_API_KEY tidak ditemukan pada environment variables server/Vercel."
+        err_msg = "OPENAI_API_KEY belum dikonfigurasi di environment Vercel."
         logger.error(f"[AI CONFIG ERROR] {err_msg}")
-        raise AIError(OPENAI_AUTH_ERROR, err_msg, status=401)
+        raise AIError(OPENAI_AUTH_ERROR, err_msg, status=500)
 
     result = await loop.run_in_executor(
         None,
@@ -271,9 +271,9 @@ async def generate_json(session_id: str, system: str, prompt: str, analysis_cont
     openai_model_name = _openai_model()
 
     if not openai_key:
-        err_msg = "OPENAI_API_KEY tidak ditemukan pada environment variables server/Vercel."
+        err_msg = "OPENAI_API_KEY belum dikonfigurasi di environment Vercel."
         logger.error(f"[AI CONFIG ERROR] {err_msg}")
-        raise AIError(OPENAI_AUTH_ERROR, err_msg, status=401)
+        raise AIError(OPENAI_AUTH_ERROR, err_msg, status=500)
 
     result = await loop.run_in_executor(
         None,

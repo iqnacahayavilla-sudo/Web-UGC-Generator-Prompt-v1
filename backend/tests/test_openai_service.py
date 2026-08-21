@@ -41,7 +41,7 @@ class TestOpenAIService(unittest.TestCase):
     # Test 1: Missing API Key
     # -------------------------------------------------------------
     def test_missing_api_key(self):
-        """Verify missing OPENAI_API_KEY raises a clear OPENAI_AUTH_ERROR (401)."""
+        """Verify missing OPENAI_API_KEY raises a clear OPENAI_AUTH_ERROR (500)."""
         async def _run():
             with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
                 jpeg_bytes = create_sample_jpeg_bytes()
@@ -52,7 +52,7 @@ class TestOpenAIService(unittest.TestCase):
                         prompt="analyze this",
                         image_bytes=jpeg_bytes
                     )
-                self.assertEqual(cm.exception.status, 401)
+                self.assertEqual(cm.exception.status, 500)
                 self.assertEqual(cm.exception.classification, ai_service.OPENAI_AUTH_ERROR)
                 self.assertIn("OPENAI_API_KEY", str(cm.exception))
 
@@ -197,6 +197,16 @@ class TestOpenAIService(unittest.TestCase):
         with self.assertRaises(ai_service.AIError) as cm:
             ai_service._extract_json("Just random words without any braces or json at all.")
         self.assertEqual(cm.exception.classification, ai_service.OPENAI_MALFORMED_RESPONSE)
+
+    # -------------------------------------------------------------
+    # Test 8: Health Check Status
+    # -------------------------------------------------------------
+    def test_health_check_status(self):
+        """Verify is_openai_configured returns boolean and never exposes key value."""
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-1234567890abcdef"}, clear=False):
+            self.assertTrue(ai_service.is_openai_configured())
+        with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
+            self.assertFalse(ai_service.is_openai_configured())
 
 
 if __name__ == "__main__":

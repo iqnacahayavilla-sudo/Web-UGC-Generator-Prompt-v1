@@ -8,13 +8,14 @@ load_dotenv(ROOT_DIR / '.env')
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import base64
 import logging
 import uuid
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 
-from services import storage_service, product_analysis, prompt_generator
+from services import storage_service, product_analysis, prompt_generator, ai_service
 from services.ai_service import (
     AIError, RATE_LIMITED, QUOTA_EXCEEDED, TIMEOUT, PROVIDER_ERROR,
     VALIDATION_ERROR, MALFORMED_RESPONSE, UNKNOWN_ERROR
@@ -185,6 +186,18 @@ async def startup():
         safe_print(f"[MONGODB CONNECTED] Database: {db_name}")
     except Exception as mongo_err:
         logger.warning(f"MongoDB ping connection notice: {mongo_err}")
+
+
+@app.get("/api/health")
+@app.get("/health")
+@api_router.get("/health")
+async def health_check():
+    """Health check endpoint for Vercel Serverless Function deployment and OpenAI config status."""
+    return {
+        "status": "ok",
+        "service": "sinergi-visual-ugc-generator",
+        "openai_configured": ai_service.is_openai_configured()
+    }
 
 
 @api_router.get("/")
